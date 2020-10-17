@@ -7,15 +7,15 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 struct Cli {
     help: bool,
     distro: Option<String>,
-    name: String,
+    name: Vec<String>,
 }
 
 impl Cli {
     fn apply(&mut self, option: &str, value: Option<String>) {
         match option {
             "-d" | "--distro" => self.distro = value.clone(),
-            "-n" | "--name" if value.is_some() => self.name = value.unwrap(),
-            "-n" | "--name" => self.name = DEFAULT_HOST.to_owned(),
+            "-n" | "--name" if value.is_some() => self.name.push(value.unwrap()),
+            "-n" | "--name" => (),
             _ => (),
         };
     }
@@ -56,7 +56,7 @@ fn parse_args() -> Cli {
     let mut cli = Cli {
         help: true,
         distro: None,
-        name: DEFAULT_HOST.to_owned(),
+        name: vec![],
     };
 
     if args.iter().any(|a| &"-h" == a || &"--help" == a) {
@@ -81,6 +81,10 @@ fn parse_args() -> Cli {
         }
     }
 
+    if cli.name.is_empty() {
+        cli.name.push(DEFAULT_HOST.to_owned());
+    }
+
     cli
 }
 
@@ -88,7 +92,7 @@ fn show_help() {
     print!(
         "wsl2-ip-host {}
 
-Usage: wsl2-ip-host [-d <distro-name>] [-n <host-name>]
+Usage: wsl2-ip-host [-d <distro-name>] [-n <host-name>] ...
 
 Uses wsl to retrieve the IP address of a wsl vm and writes it to the windows hosts
 file. Testing so far seems to indicate that all wsl2 distros return the same IP
@@ -96,8 +100,10 @@ address so the -d option may not be important.
 
 Options:
 -d, --distro <distro-name>  Distro name to use.  This is passed into the `wsl`
-                           command. When empty the default wsl distro is used.
+                            command. When empty the default wsl distro is used.
 -n, --name <host-name>      Host name to associate the ip to [default: host.wsl2.internal]
+                            this option can be passed multiple times to add more than one
+                            host name.
 -h, --help                  Display help text
 ",
         VERSION
@@ -139,7 +145,9 @@ fn run_app() -> Result<(), String> {
         })
         .collect();
 
-    lines.push(format!("{} {} {}", ip, &cli.name, HOSTS_COMMENT));
+    cli.name.iter().for_each(|name| {
+        lines.push(format!("{} {} {}", ip, name, HOSTS_COMMENT));
+    });
 
     use std::io::Write;
     let mut file = match std::fs::File::create(&hosts_path) {
