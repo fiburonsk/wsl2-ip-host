@@ -101,12 +101,12 @@ address so the -d option may not be important.
 Options:
 -d, --distro <distro-name>  Distro name to use.  This is passed into the `wsl`
                             command. When empty the default wsl distro is used.
--n, --name <host-name>      Host name to associate the ip to [default: host.wsl2.internal]
+-n, --name <host-name>      Host name to associate the ip to [default: {}]
                             this option can be passed multiple times to add more than one
                             host name.
 -h, --help                  Display help text
 ",
-        VERSION
+        VERSION, DEFAULT_HOST
     );
 }
 
