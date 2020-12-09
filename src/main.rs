@@ -1,5 +1,4 @@
 const HOSTS_COMMENT: &str = "# added by wsl2-ip-host";
-const HOSTS_PATH: &str = "C:\\Windows\\System32\\drivers\\etc\\hosts";
 const DEFAULT_HOST: &str = "host.wsl.internal";
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -21,6 +20,7 @@ impl Cli {
     }
 }
 
+#[cfg(target_family = "windows")]
 fn find_wsl_ip(distro: &Option<String>) -> Result<String, String> {
     let mut args = vec![];
 
@@ -31,23 +31,61 @@ fn find_wsl_ip(distro: &Option<String>) -> Result<String, String> {
     }
 
     args.push("--".to_owned());
-    args.push("hostname".to_owned());
-    args.push("-I".to_owned());
+    args.push("ip".to_owned());
+    args.push("-4".to_owned());
+    args.push("-br".to_owned());
+    args.push("address".to_owned());
+    args.push("show".to_owned());
+    args.push("eth0".to_owned());
 
     std::process::Command::new("wsl.exe")
         .args(args)
         .output()
         .map_err(|e| format!("{}", e))
-        .and_then(|output| {
-            let ip = String::from_utf8(output.stdout).map_err(|e| format!("{}", e));
-
-            if output.status.success() {
-                ip
-            } else {
-                Err(format!("{}", ip.unwrap()).to_owned())
+        .and_then(|output: std::process::Output| {
+            if false == output.status.success() {
+                return Err(String::from_utf8(output.stderr)
+                    .unwrap_or("Unable to run ip command.".to_owned()));
             }
+
+            String::from_utf8(output.stdout)
+                .map_err(|e| format!("{}", e))
+                .and_then(|s| match s.split_whitespace().last() {
+                    Some(text) => Ok(text.to_owned()),
+                    None => Err("Unable to split output text.".to_owned()),
+                })
+                .and_then(|ip| match ip.split("/").next() {
+                    Some(ip) => Ok(ip.to_owned()),
+                    None => Err("Unable to separate IP from subnet".to_owned()),
+                })
         })
-        .and_then(|ip| Ok(ip.trim().to_owned()))
+}
+
+#[cfg(target_family = "unix")]
+fn find_wsl_ip() -> Result<String, String> {
+    let args = vec!["-4", "-br", "address", "show", "eth0"];
+
+    std::process::Command::new("ip")
+        .args(args)
+        .output()
+        .map_err(|e| format!("{}", e))
+        .and_then(|output: std::process::Output| {
+            if false == output.status.success() {
+                return Err(String::from_utf8(output.stderr)
+                    .unwrap_or("Unable to run ip command.".to_owned()));
+            }
+
+            String::from_utf8(output.stdout)
+                .map_err(|e| format!("{}", e))
+                .and_then(|s| match s.split_whitespace().last() {
+                    Some(text) => Ok(text.to_owned()),
+                    None => Err("Unable to split output text.".to_owned()),
+                })
+                .and_then(|ip| match ip.split("/").next() {
+                    Some(ip) => Ok(ip.to_owned()),
+                    None => Err("Unable to separate IP from subnet".to_owned()),
+                })
+        })
 }
 
 fn parse_args() -> Cli {
@@ -111,6 +149,14 @@ Options:
 }
 
 fn run_app() -> Result<(), String> {
+    let hosts_path = if cfg!(unix) {
+        "/mnt/c/Windows/System32/drivers/etc/hosts"
+    } else if cfg!(windows) {
+        "C:\\Windows\\System32\\drivers\\etc\\hosts"
+    } else {
+        return Err("Unable to determine hosts file path from the OS".into());
+    };
+
     let cli = parse_args();
 
     if cli.help {
@@ -118,14 +164,21 @@ fn run_app() -> Result<(), String> {
         return Ok(());
     }
 
-    let hosts_path = std::path::PathBuf::from(HOSTS_PATH);
+    let hosts_path = std::path::PathBuf::from(hosts_path);
 
     let file = match std::fs::File::open(&hosts_path) {
         Ok(f) => f,
         Err(e) => return Err(format!("{}", e)),
     };
 
+    #[cfg(target_family = "windows")]
     let ip = match find_wsl_ip(&cli.distro) {
+        Ok(s) => s,
+        Err(e) => return Err(e),
+    };
+
+    #[cfg(target_family = "unix")]
+    let ip = match find_wsl_ip() {
         Ok(s) => s,
         Err(e) => return Err(e),
     };
