@@ -1,6 +1,6 @@
 # wsl2-ip-host
 
-##2 From windows
+## From windows
 
 * Windows 10
 * Requires that wsl.exe be installed and in your path.
