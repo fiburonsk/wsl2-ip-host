@@ -8,7 +8,7 @@
 * A wsl distro be installed
 * `ip` command available in a wsl distro with eth0 adapter
 
-This application runs `ip -4 -br address show eth0` inside of a wsl distro to get the IP address and then appends it to the hosts file with a domain of `host.wsl.internal`.  The domain can be changed using the `-n` or `--name` option.  You can supply multiple domains by passing the `--name` option multiple times.
+This application runs `ip -4 -br address show eth0` inside of the default wsl distro to get the IP address and then appends it to the hosts file with a domain of `host.wsl.internal`.  The domain can be changed using the `-n` or `--name` option.  You can supply multiple domains by passing the `--name` option multiple times.
 
 I use a scheduled task in windows to run this on login and refresh the wsl ip in the hosts file since the IP changes after every reboot.
 

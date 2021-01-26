@@ -1,9 +1,9 @@
-[package]
-name = "wsl2-ip-host"
-version = "1.2.0"
-authors = ["fiburonsk <10441670+fiburonsk@users.noreply.github.com>"]
-edition = "2018"
+[workspace]
+members = [
+  "main",
+  "cli",
+  "win"
+]
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
-[dependencies]
+[profile.release]
+opt-level = "s"
