@@ -66,9 +66,27 @@ pub fn clean_list(list: &[String]) -> Vec<String> {
         .collect()
 }
 
+#[derive(Clone)]
 pub struct Config {
     pub hosts_path: std::path::PathBuf,
     pub names: Vec<String>,
+    pub ip: Option<String>,
+}
+
+fn check_hosts_path(path: &str) -> Result<std::path::PathBuf, String> {
+    if let Ok(p) = std::path::PathBuf::from_str(path) {
+        match p
+            .metadata()
+            .map_err(|_| "Unable to gather metadata.".to_owned())
+            .and_then(|m| Ok(m.permissions().readonly()))
+        {
+            Ok(false) => Ok(p),
+            Ok(true) => Err(format!("path is not writable: {:?}", path)),
+            Err(e) => Err(e),
+        }
+    } else {
+        Err(format!("Unable to create path from {}", path).to_owned())
+    }
 }
 
 impl Config {
@@ -78,26 +96,40 @@ impl Config {
         Ok(c)
     }
 
+    pub fn set_hosts_path(&mut self, path: &str) {
+        self.hosts_path = match check_hosts_path(path) {
+            Ok(p) => p,
+            _ => return,
+        };
+    }
+
     pub fn set_names(&mut self, list: Vec<String>) {
         self.names = list;
     }
 
-    pub fn with_hosts_path(path: &str) -> Result<Config, String> {
-        let p =
-            std::path::PathBuf::from_str(path).map_err(|_| "Unable to create path.".to_owned())?;
-
-        match p
-            .metadata()
-            .map_err(|_| "Unable to gather metadata.".to_owned())
-            .and_then(|m| Ok(m.permissions().readonly()))
-        {
-            Ok(false) => Ok(Config {
-                hosts_path: p,
-                names: vec![],
-            }),
-            Ok(true) => Err(format!("host path is not writable: {}", path)),
-            Err(e) => Err(e),
+    pub fn add_name(&mut self, name: String) {
+        if false == self.names.contains(&name) {
+            self.names.push(name);
         }
+    }
+
+    pub fn remove_name(&mut self, name: String) {
+        self.names = self
+            .names
+            .clone()
+            .into_iter()
+            .filter(|n| n.ne(&name))
+            .collect();
+    }
+
+    pub fn with_hosts_path(path: &str) -> Result<Config, String> {
+        let p = check_hosts_path(path)?;
+
+        Ok(Config {
+            hosts_path: p,
+            names: vec![],
+            ip: None,
+        })
     }
 
     pub fn read_file(&self) -> Result<Vec<String>, String> {
@@ -107,18 +139,29 @@ impl Config {
         Ok(reader.lines().filter_map(|s| s.ok()).collect())
     }
 
-    pub fn apply_names(&self, ip: &str, lines: &[String]) -> Vec<String> {
+    pub fn apply_names(&self, lines: &[String]) -> Vec<String> {
         let mut list = lines.to_owned();
-        list.extend(
-            self.names
-                .iter()
-                .map(|name| format!("{} {} {}", ip, name, HOSTS_COMMENT)),
-        );
+
+        if let Some(ip) = &self.ip {
+            list.extend(
+                self.names
+                    .iter()
+                    .map(|name| format!("{} {} {}", ip, name, HOSTS_COMMENT)),
+            );
+        }
 
         list
     }
 
-    pub fn write_file(&self, lines: &Vec<String>) -> Result<(), String> {
+    pub fn load_ip(&mut self) {
+        self.ip = find_wsl_ip().ok();
+    }
+
+    pub fn write_file(&self) -> Result<(), String> {
+        let lines = self.read_file()?;
+        let lines = clean_list(&lines);
+        let lines = self.apply_names(&lines);
+
         use std::io::Write;
         let mut file = std::fs::File::create(&self.hosts_path).map_err(|e| format!("{}", e))?;
 

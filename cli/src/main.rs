@@ -92,11 +92,7 @@ Options:
 
         let mut cfg = lib::Config::new()?;
         cfg.set_names(app.names.clone());
-
-        let ip = lib::find_wsl_ip()?;
-        let lines = cfg.read_file()?;
-        let lines = lib::clean_list(&lines);
-        let lines = cfg.apply_names(&ip, &lines);
-        cfg.write_file(&lines)
+        cfg.load_ip();
+        cfg.write_file()
     }
 }
