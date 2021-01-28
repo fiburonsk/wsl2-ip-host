@@ -12,6 +12,11 @@ This application runs `ip -4 -br address show eth0` inside of the default wsl di
 
 I use a scheduled task in windows to run this on login and refresh the wsl ip in the hosts file since the IP changes after every reboot.
 
+### Windows GUI
+
+`wsl2-ip-host-gui.exe` is an alternative way to run the app.  It runs in the 
+background with a system tray icon.  Right clicking and selecting `Write` will overwrite the hosts file.  A configuration file can be saved in your home folder as `.wsl2-ip-host.json` and will automatically attempt to be read on startup.  If using in a scheduled task you can pass the `--run` argument to trigger a write immediately after initialization: `wsl2-ip-host-gui.exe --run`.  Selecting open allows configuring the app and saving for future runs.  The hosts file can be viewed and the changes previewed.
+
 ## From WSL2
 
 * Write access to `/mnt/c/Windows/System32/Drivers/etc/hosts`

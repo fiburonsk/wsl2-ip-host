@@ -130,6 +130,7 @@ pub mod ui {
         }
 
         fn update_buttons(&self, access: lib::Access) {
+            self.tray.tray_run.set_enabled(access.write);
             self.actions_ui.write_button.set_enabled(access.write);
             self.actions_ui.preview_button.set_enabled(access.read);
             self.options.view_hosts_button.set_enabled(access.read);

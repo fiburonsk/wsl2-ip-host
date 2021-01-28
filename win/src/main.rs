@@ -86,6 +86,20 @@ mod app {
         std::fs::write(path, json).map_err(|e| format!("{}", e))
     }
 
+    fn notify() {
+        match notify_rust::Notification::new()
+            .appname("wsl2-ip-host")
+            .auto_icon()
+            .timeout(5000)
+            .summary("Wrote to hosts file")
+            .body("Applied ip and domain names to the hosts file.")
+            .show()
+        {
+            Ok(_) => (),
+            Err(_) => (),
+        }
+    }
+
     pub fn run() -> Result<(), String> {
         let mut state = read_config()?;
         state.load_ip();
@@ -107,7 +121,10 @@ mod app {
                             main_tx.send(Cmd::State(s.clone())).unwrap();
 
                             if std::env::args().any(|a| a == "--run") {
-                                s.write_file().unwrap();
+                                match s.write_file() {
+                                    Ok(()) => notify(),
+                                    _ => (),
+                                };
                             }
                         }
                         _ => main_tx
@@ -190,9 +207,12 @@ mod app {
 
                 Cmd::Write => match state.write() {
                     Ok(s) => match s.write_file() {
-                        Ok(()) => main_tx
-                            .send(Cmd::Content("Wrote changes to hosts file.".to_owned()))
-                            .unwrap(),
+                        Ok(()) => {
+                            main_tx
+                                .send(Cmd::Content("Wrote changes to hosts file.".to_owned()))
+                                .unwrap();
+                            notify();
+                        }
                         Err(e) => main_tx.send(Cmd::Content(format!("{}", e))).unwrap(),
                     },
                     _ => main_tx
