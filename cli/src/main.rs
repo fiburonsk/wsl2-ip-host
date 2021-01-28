@@ -90,7 +90,7 @@ Options:
             return Ok(());
         }
 
-        let mut cfg = lib::Config::new()?;
+        let mut cfg = lib::Config::new();
         cfg.set_names(app.names.clone());
         cfg.load_ip();
         cfg.write_file()

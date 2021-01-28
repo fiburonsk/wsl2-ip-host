@@ -59,12 +59,12 @@ mod app {
         let mut config = if let Ok(content) = std::fs::read(path) {
             let state: SaveConfig =
                 serde_json::from_slice(&content).map_err(|e| format!("{}", e))?;
-            let mut config = lib::Config::with_hosts_path(&state.hosts_path).unwrap();
+            let mut config = lib::Config::with_hosts_path(&state.hosts_path);
             config.names = state.domains.to_owned();
 
             config
         } else {
-            lib::Config::new()?
+            lib::Config::new()
         };
 
         config.load_ip();
@@ -73,13 +73,11 @@ mod app {
     }
 
     fn save_config(config: &lib::Config) -> Result<(), String> {
-        let save = if let Some(s) = config.hosts_path.to_str() {
+        let save = {
             SaveConfig {
-                hosts_path: s.to_owned(),
+                hosts_path: config.hosts_path.to_owned(),
                 domains: config.names.to_owned(),
             }
-        } else {
-            return Err("Unable to convert hosts_path to string.".to_owned());
         };
 
         let json = serde_json::to_string_pretty(&save).map_err(|e| format!("{}", e))?;
@@ -112,7 +110,9 @@ mod app {
                                 s.write_file().unwrap();
                             }
                         }
-                        _ => main_tx.send(Cmd::None).unwrap(),
+                        _ => main_tx
+                            .send(Cmd::Content("Unable to initialize state.".to_owned()))
+                            .unwrap(),
                     };
                 }
                 Cmd::AddName(name) => {
@@ -125,6 +125,7 @@ mod app {
                         _ => main_tx.send(Cmd::None).unwrap(),
                     };
                 }
+
                 Cmd::RemoveName(name) => {
                     if let Ok(mut s) = state.write() {
                         s.remove_name(name);
@@ -140,11 +141,12 @@ mod app {
                     match state.write() {
                         Ok(mut s) => {
                             s.set_hosts_path(&path);
-                            main_tx.send(Cmd::Content(path)).unwrap();
+                            main_tx.send(Cmd::State(s.clone())).unwrap();
                         }
                         _ => main_tx.send(Cmd::None).unwrap(),
                     };
                 }
+
                 Cmd::ReadFile => {
                     match state.read() {
                         Ok(s) => match s.read_file() {
@@ -156,6 +158,7 @@ mod app {
                         _ => main_tx.send(Cmd::None).unwrap(),
                     };
                 }
+
                 Cmd::Preview => match state.read() {
                     Ok(s) => match s
                         .read_file()
@@ -167,12 +170,13 @@ mod app {
                     },
                     _ => main_tx.send(Cmd::None).unwrap(),
                 },
+
                 Cmd::SaveConfig => {
                     match state.read() {
                         Ok(s) => match save_config(&s) {
                             Ok(()) => main_tx
                                 .send(Cmd::Content(format!(
-                                    "Successfully saved to {}",
+                                    "saved to {}",
                                     save_path().unwrap().to_str().unwrap().to_owned()
                                 )))
                                 .unwrap(),
@@ -183,6 +187,7 @@ mod app {
                             .unwrap(),
                     };
                 }
+
                 Cmd::Write => match state.write() {
                     Ok(s) => match s.write_file() {
                         Ok(()) => main_tx
@@ -194,6 +199,7 @@ mod app {
                         .send(Cmd::Content("Unable to read app state.".to_owned()))
                         .unwrap(),
                 },
+
                 Cmd::Quit => {
                     break;
                 }

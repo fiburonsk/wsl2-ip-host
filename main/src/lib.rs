@@ -1,4 +1,6 @@
-use std::{io::BufRead, str::FromStr};
+use std::io::BufRead;
+
+use faccess::PathExt;
 
 #[cfg(target_family = "unix")]
 mod util {
@@ -68,39 +70,34 @@ pub fn clean_list(list: &[String]) -> Vec<String> {
 
 #[derive(Clone)]
 pub struct Config {
-    pub hosts_path: std::path::PathBuf,
+    pub hosts_path: String,
     pub names: Vec<String>,
     pub ip: Option<String>,
 }
 
-fn check_hosts_path(path: &str) -> Result<std::path::PathBuf, String> {
-    if let Ok(p) = std::path::PathBuf::from_str(path) {
-        match p
-            .metadata()
-            .map_err(|_| "Unable to gather metadata.".to_owned())
-            .and_then(|m| Ok(m.permissions().readonly()))
-        {
-            Ok(false) => Ok(p),
-            Ok(true) => Err(format!("path is not writable: {:?}", path)),
-            Err(e) => Err(e),
-        }
-    } else {
-        Err(format!("Unable to create path from {}", path).to_owned())
-    }
+pub struct Access {
+    pub path: std::path::PathBuf,
+    pub read: bool,
+    pub write: bool,
 }
 
 impl Config {
-    pub fn new() -> Result<Config, String> {
-        let c = Config::with_hosts_path(util::DEFAULT_HOSTS_PATH)?;
-
-        Ok(c)
+    pub fn new() -> Config {
+        Config::with_hosts_path(util::DEFAULT_HOSTS_PATH)
     }
 
     pub fn set_hosts_path(&mut self, path: &str) {
-        self.hosts_path = match check_hosts_path(path) {
-            Ok(p) => p,
-            _ => return,
-        };
+        self.hosts_path = path.to_owned();
+    }
+
+    pub fn check_hosts_path(&self) -> Access {
+        let path = std::path::PathBuf::from(&self.hosts_path);
+
+        Access {
+            read: path.readable(),
+            write: path.writable(),
+            path: path,
+        }
     }
 
     pub fn set_names(&mut self, list: Vec<String>) {
@@ -122,18 +119,22 @@ impl Config {
             .collect();
     }
 
-    pub fn with_hosts_path(path: &str) -> Result<Config, String> {
-        let p = check_hosts_path(path)?;
-
-        Ok(Config {
-            hosts_path: p,
+    pub fn with_hosts_path(path: &str) -> Config {
+        Config {
+            hosts_path: path.to_owned(),
             names: vec![],
             ip: None,
-        })
+        }
     }
 
     pub fn read_file(&self) -> Result<Vec<String>, String> {
-        let file = std::fs::File::open(&self.hosts_path).map_err(|e| format!("{}", e))?;
+        let access = self.check_hosts_path();
+
+        if false == access.read {
+            return Err(format!("Unable to read file {}", self.hosts_path));
+        }
+
+        let file = std::fs::File::open(access.path).map_err(|e| format!("{}", e))?;
         let reader = std::io::BufReader::new(file);
 
         Ok(reader.lines().filter_map(|s| s.ok()).collect())
@@ -158,12 +159,21 @@ impl Config {
     }
 
     pub fn write_file(&self) -> Result<(), String> {
+        let access = self.check_hosts_path();
+
+        if false == access.write {
+            return Err(format!(
+                "Insufficient access to write file {}",
+                self.hosts_path
+            ));
+        }
+
         let lines = self.read_file()?;
         let lines = clean_list(&lines);
         let lines = self.apply_names(&lines);
 
         use std::io::Write;
-        let mut file = std::fs::File::create(&self.hosts_path).map_err(|e| format!("{}", e))?;
+        let mut file = std::fs::File::create(access.path).map_err(|e| format!("{}", e))?;
 
         lines.iter().for_each(|l| {
             writeln!(&mut file, "{}", l).unwrap();

@@ -62,6 +62,7 @@ pub struct PreviewUi {
 pub struct MenuUi {
     main: nwg::Menu,
     save: nwg::MenuItem,
+    sep: nwg::MenuSeparator,
     quit: nwg::MenuItem,
 }
 
@@ -94,6 +95,7 @@ pub struct Systray {
 
 pub mod ui {
     use super::*;
+    use main as lib;
     use nwg::{
         self,
         stretch::geometry::{Rect, Size},
@@ -127,16 +129,32 @@ pub mod ui {
             }
         }
 
+        fn update_buttons(&self, access: lib::Access) {
+            self.actions_ui.write_button.set_enabled(access.write);
+            self.actions_ui.preview_button.set_enabled(access.read);
+            self.options.view_hosts_button.set_enabled(access.read);
+        }
         fn on_init(&self) {
             self.tx.send(Cmd::OnInit).unwrap();
-            if let Ok(Cmd::State(c)) = self.rx.recv() {
-                self.options
-                    .hosts_path_input
-                    .set_text(&c.hosts_path.to_str().unwrap());
-                self.options
-                    .names_ui
-                    .names_list
-                    .set_collection(c.names.to_owned());
+            match self.rx.recv() {
+                Ok(Cmd::State(c)) => {
+                    self.options.hosts_path_input.set_text(&c.hosts_path);
+                    self.options
+                        .names_ui
+                        .names_list
+                        .set_collection(c.names.to_owned());
+
+                    let access = c.check_hosts_path();
+                    if false == access.write {
+                        self.status
+                            .set_text(0, "Insufficient access to write to hosts file.");
+                    }
+                    self.update_buttons(access);
+                }
+                Ok(Cmd::Content(s)) => {
+                    self.status.set_text(0, &s);
+                }
+                _ => (),
             }
         }
 
@@ -180,9 +198,10 @@ pub mod ui {
                             .send(Cmd::SetHostsFile(s.to_str().unwrap().to_owned()))
                             .unwrap();
 
-                        if let Ok(Cmd::Content(s)) = self.rx.recv() {
-                            self.options.hosts_path_input.set_text(&s);
+                        if let Ok(Cmd::State(c)) = self.rx.recv() {
+                            self.options.hosts_path_input.set_text(&c.hosts_path);
                             self.status.set_text(0, "Updated hosts file path.");
+                            self.update_buttons(c.check_hosts_path());
                         }
                     }
                     _ => (),
@@ -247,6 +266,10 @@ pub mod ui {
                 .text("Save Config")
                 .parent(&data.main)
                 .build(&mut data.save)?;
+
+            nwg::MenuSeparator::builder()
+                .parent(&data.main)
+                .build(&mut data.sep)?;
 
             nwg::MenuItem::builder()
                 .text("Quit")
@@ -664,7 +687,9 @@ pub mod ui {
                             }
                         }
                         Event::OnInit => {
-                            Main::on_init(&evt_ui);
+                            if &handle == &evt_ui.window.handle {
+                                Main::on_init(&evt_ui);
+                            }
                         }
                         _ => {}
                     }
