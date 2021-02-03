@@ -18,15 +18,18 @@ mod util {
 
 #[cfg(target_family = "windows")]
 mod util {
+    use std::os::windows::process::CommandExt;
+
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
     pub const DEFAULT_HOSTS_PATH: &str = "C:\\Windows\\System32\\drivers\\etc\\hosts";
 
     pub fn run_wsl_ip_cmd() -> Result<std::process::Output, String> {
         let args = vec!["--", "ip", "-4", "-br", "address", "show", "eth0"];
 
-        std::process::Command::new("wsl.exe")
-            .args(args)
-            .output()
-            .map_err(|e| format!("{}", e))
+        let mut cmd = std::process::Command::new("wsl.exe");
+        cmd.args(args);
+        cmd.creation_flags(CREATE_NO_WINDOW);
+        cmd.output().map_err(|e| format!("{}", e))
     }
 }
 
@@ -72,7 +75,6 @@ pub fn clean_list(list: &[String]) -> Vec<String> {
 pub struct Config {
     pub hosts_path: String,
     pub names: Vec<String>,
-    pub ip: Option<String>,
 }
 
 pub struct Access {
@@ -123,7 +125,6 @@ impl Config {
         Config {
             hosts_path: path.to_owned(),
             names: vec![],
-            ip: None,
         }
     }
 
@@ -143,7 +144,7 @@ impl Config {
     pub fn apply_names(&self, lines: &[String]) -> Vec<String> {
         let mut list = lines.to_owned();
 
-        if let Some(ip) = &self.ip {
+        if let Ok(ip) = find_wsl_ip() {
             list.extend(
                 self.names
                     .iter()
@@ -152,10 +153,6 @@ impl Config {
         }
 
         list
-    }
-
-    pub fn load_ip(&mut self) {
-        self.ip = find_wsl_ip().ok();
     }
 
     pub fn write_file(&self) -> Result<(), String> {

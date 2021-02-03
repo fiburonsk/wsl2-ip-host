@@ -45,7 +45,7 @@ mod app {
         domains: Vec<String>,
     }
 
-    const SAVE_NAME: &str = ".wsl2-ip-config.json";
+    const SAVE_NAME: &str = ".wsl2-ip-host.json";
 
     fn save_path() -> Result<std::path::PathBuf, String> {
         match home::home_dir() {
@@ -56,7 +56,7 @@ mod app {
 
     fn read_config() -> Result<lib::Config, String> {
         let path = save_path()?;
-        let mut config = if let Ok(content) = std::fs::read(path) {
+        let config = if let Ok(content) = std::fs::read(path) {
             let state: SaveConfig =
                 serde_json::from_slice(&content).map_err(|e| format!("{}", e))?;
             let mut config = lib::Config::with_hosts_path(&state.hosts_path);
@@ -64,10 +64,11 @@ mod app {
 
             config
         } else {
-            lib::Config::new()
-        };
+            let mut config = lib::Config::new();
+            config.add_name(lib::DEFAULT_HOST.to_owned());
 
-        config.load_ip();
+            config
+        };
 
         Ok(config)
     }
@@ -101,9 +102,7 @@ mod app {
     }
 
     pub fn run() -> Result<(), String> {
-        let mut state = read_config()?;
-        state.load_ip();
-        state.add_name(lib::DEFAULT_HOST.to_owned());
+        let state = read_config()?;
 
         let state = RwLock::new(state);
         let (cmd_tx, cmd_rx) = mpsc::channel();
