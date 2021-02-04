@@ -24,6 +24,7 @@ pub struct Main {
     preview_ui: PreviewUi,
     actions_ui: ActionsUi,
     actions_frame: nwg::Frame,
+    about_ui: AboutUi,
     status: nwg::StatusBar,
     tx: mpsc::Sender<Cmd>,
     rx: mpsc::Receiver<Cmd>,
@@ -44,11 +45,17 @@ pub struct Options {
     hosts_path_row: nwg::FlexboxLayout,
     hosts_path_input: nwg::TextInput,
     hosts_path_label: nwg::Label,
-
     view_hosts_button: nwg::Button,
-
     names_ui_frame: nwg::Frame,
     names_ui: NamesUi,
+}
+
+#[derive(Default)]
+pub struct AboutUi {
+    window: nwg::Window,
+    layout: nwg::GridLayout,
+    message: nwg::Label,
+    ok: nwg::Button,
 }
 
 #[derive(Default)]
@@ -62,6 +69,7 @@ pub struct PreviewUi {
 pub struct MenuUi {
     main: nwg::Menu,
     save: nwg::MenuItem,
+    about: nwg::MenuItem,
     sep: nwg::MenuSeparator,
     quit: nwg::MenuItem,
 }
@@ -89,11 +97,14 @@ pub struct Systray {
     tray_menu: nwg::Menu,
     tray_run: nwg::MenuItem,
     tray_open: nwg::MenuItem,
+    tray_about: nwg::MenuItem,
     tray_sep: nwg::MenuSeparator,
     tray_exit: nwg::MenuItem,
 }
 
 pub mod ui {
+    const VERSION: &str = env!("CARGO_PKG_VERSION");
+
     use super::*;
     use main as lib;
     use nwg::{
@@ -124,6 +135,7 @@ pub mod ui {
                 actions_frame: nwg::Frame::default(),
                 actions_ui: ActionsUi::default(),
                 status: nwg::StatusBar::default(),
+                about_ui: AboutUi::default(),
                 tx: tx,
                 rx: rx,
             }
@@ -157,6 +169,14 @@ pub mod ui {
                 }
                 _ => (),
             }
+        }
+
+        fn about(&self) {
+            self.about_ui.window.set_visible(true);
+        }
+
+        fn close_about(&self) {
+            self.about_ui.window.set_visible(false);
         }
 
         fn open(&self) {
@@ -268,6 +288,11 @@ pub mod ui {
                 .parent(&data.main)
                 .build(&mut data.save)?;
 
+            nwg::MenuItem::builder()
+                .text("About")
+                .parent(&data.main)
+                .build(&mut data.about)?;
+
             nwg::MenuSeparator::builder()
                 .parent(&data.main)
                 .build(&mut data.sep)?;
@@ -328,6 +353,7 @@ pub mod ui {
             nwg::Window::builder()
                 .flags(nwg::WindowFlags::WINDOW | nwg::WindowFlags::RESIZABLE)
                 .size((550, 650))
+                .center(true)
                 .title("Show Content")
                 .parent(Some(&parent))
                 .build(&mut data.window)?;
@@ -349,6 +375,48 @@ pub mod ui {
                 .build(&mut data.layout)?;
 
             Ok(())
+        }
+    }
+
+    impl PartialUi for AboutUi {
+        fn build_partial<W: Into<nwg::ControlHandle>>(
+            data: &mut AboutUi,
+            parent: Option<W>,
+        ) -> Result<(), nwg::NwgError> {
+            let parent = parent.unwrap().into();
+
+            nwg::Window::builder()
+                .flags(nwg::WindowFlags::WINDOW)
+                .size((200, 160))
+                .center(true)
+                .title("About")
+                .parent(Some(&parent))
+                .build(&mut data.window)?;
+
+            nwg::Label::builder()
+                .text(&format!("wsl2-ip-host\r\nversion: {}", VERSION))
+                .flags(nwg::LabelFlags::VISIBLE)
+                .parent(&data.window)
+                .h_align(nwg::HTextAlign::Center)
+                .build(&mut data.message)?;
+
+            nwg::Button::builder()
+                .text("Ok")
+                .parent(&data.window)
+                .build(&mut data.ok)?;
+
+            nwg::GridLayout::builder()
+                .parent(&data.window)
+                .spacing(4)
+                .child_item(nwg::GridLayoutItem::new(&data.message, 0, 0, 2, 2))
+                .child(1, 2, &data.ok)
+                .build(&mut data.layout)?;
+
+            Ok(())
+        }
+
+        fn handles(&self) -> Vec<&nwg::ControlHandle> {
+            vec![&self.window.handle]
         }
     }
 
@@ -383,6 +451,11 @@ pub mod ui {
                 .text("Open")
                 .parent(&data.tray_menu)
                 .build(&mut data.tray_open)?;
+
+            nwg::MenuItem::builder()
+                .text("About")
+                .parent(&data.tray_menu)
+                .build(&mut data.tray_about)?;
 
             nwg::MenuSeparator::builder()
                 .parent(&data.tray_menu)
@@ -588,7 +661,7 @@ pub mod ui {
                 .icon(Some(&data.icon))
                 .flags(nwg::WindowFlags::MAIN_WINDOW)
                 .size((500, 400))
-                .position((500, 200))
+                .center(true)
                 .title("WSL2 IP Writer")
                 .parent(Some(&data.window))
                 .build(&mut data.window)?;
@@ -619,6 +692,7 @@ pub mod ui {
             Options::build_partial(&mut data.options, Some(&data.options_frame))?;
             ActionsUi::build_partial(&mut data.actions_ui, Some(&data.actions_frame))?;
             PreviewUi::build_partial(&mut data.preview_ui, Some(&data.window))?;
+            AboutUi::build_partial(&mut data.about_ui, Some(&data.window))?;
 
             nwg::FlexboxLayout::builder()
                 .parent(&data.window)
@@ -648,57 +722,69 @@ pub mod ui {
                 default_handler: Default::default(),
             };
 
-            let handle = &ui.window.handle;
-            let evt_ui = Rc::downgrade(&ui.inner);
-            let handle_events = move |evt, evt_data, handle| {
-                if let Some(evt_ui) = evt_ui.upgrade() {
-                    evt_ui.options.process_event(evt, &evt_data, handle);
-                    match evt {
-                        Event::OnContextMenu => {
-                            if &handle == &evt_ui.tray.tray {
-                                Main::show_menu(&evt_ui);
-                            }
-                        }
-                        Event::OnButtonClick => {
-                            if &handle == &evt_ui.options.hosts_path_file_button {
-                                Main::select_file(&evt_ui);
-                            } else if &handle == &evt_ui.options.view_hosts_button {
-                                Main::show_hosts_file(&evt_ui);
-                            } else if &handle == &evt_ui.actions_ui.write_button {
-                                Main::write(&evt_ui);
-                            } else if &handle == &evt_ui.actions_ui.preview_button {
-                                Main::show_preview(&evt_ui);
-                            } else if &handle == &evt_ui.options.names_ui.names_add {
-                                Main::add_name(&evt_ui)
-                            } else if &handle == &evt_ui.options.names_ui.names_remove {
-                                Main::remove_name(&evt_ui)
-                            }
-                        }
-                        Event::OnMenuItemSelected => {
-                            if &handle == &evt_ui.tray.tray_run {
-                                Main::write(&evt_ui);
-                            } else if &handle == &evt_ui.tray.tray_open {
-                                Main::open(&evt_ui);
-                            } else if &handle == &evt_ui.tray.tray_exit {
-                                Main::on_exit(&evt_ui);
-                            } else if &handle == &evt_ui.menu_ui.save {
-                                Main::save_config(&evt_ui);
-                            } else if &handle == &evt_ui.menu_ui.quit {
-                                Main::on_exit(&evt_ui);
-                            }
-                        }
-                        Event::OnInit => {
-                            if &handle == &evt_ui.window.handle {
-                                Main::on_init(&evt_ui);
-                            }
-                        }
-                        _ => {}
-                    }
-                }
-            };
+            // Events
+            let mut window_handles = vec![&ui.window.handle];
+            window_handles.append(&mut ui.about_ui.handles());
+            for handle in window_handles.iter() {
+                let evt_ui = Rc::downgrade(&ui.inner);
+                let handle_events = move |evt, evt_data, handle| {
+                    if let Some(evt_ui) = evt_ui.upgrade() {
+                        evt_ui.about_ui.process_event(evt, &evt_data, handle);
 
-            let handler = nwg::full_bind_event_handler(handle, handle_events);
-            ui.default_handler.borrow_mut().push(handler);
+                        match evt {
+                            Event::OnContextMenu => {
+                                if &handle == &evt_ui.tray.tray {
+                                    Main::show_menu(&evt_ui);
+                                }
+                            }
+                            Event::OnButtonClick => {
+                                if &handle == &evt_ui.options.hosts_path_file_button {
+                                    Main::select_file(&evt_ui);
+                                } else if &handle == &evt_ui.options.view_hosts_button {
+                                    Main::show_hosts_file(&evt_ui);
+                                } else if &handle == &evt_ui.actions_ui.write_button {
+                                    Main::write(&evt_ui);
+                                } else if &handle == &evt_ui.actions_ui.preview_button {
+                                    Main::show_preview(&evt_ui);
+                                } else if &handle == &evt_ui.options.names_ui.names_add {
+                                    Main::add_name(&evt_ui)
+                                } else if &handle == &evt_ui.options.names_ui.names_remove {
+                                    Main::remove_name(&evt_ui)
+                                } else if &handle == &evt_ui.about_ui.ok {
+                                    Main::close_about(&evt_ui)
+                                }
+                            }
+                            Event::OnMenuItemSelected => {
+                                if &handle == &evt_ui.tray.tray_run {
+                                    Main::write(&evt_ui);
+                                } else if &handle == &evt_ui.tray.tray_open {
+                                    Main::open(&evt_ui);
+                                } else if &handle == &evt_ui.tray.tray_about {
+                                    Main::about(&evt_ui);
+                                } else if &handle == &evt_ui.tray.tray_exit {
+                                    Main::on_exit(&evt_ui);
+                                } else if &handle == &evt_ui.menu_ui.save {
+                                    Main::save_config(&evt_ui);
+                                } else if &handle == &evt_ui.menu_ui.about {
+                                    Main::about(&evt_ui);
+                                } else if &handle == &evt_ui.menu_ui.quit {
+                                    Main::on_exit(&evt_ui);
+                                }
+                            }
+                            Event::OnInit => {
+                                if &handle == &evt_ui.window.handle {
+                                    Main::on_init(&evt_ui);
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                };
+
+                let handler = nwg::full_bind_event_handler(handle, handle_events);
+
+                ui.default_handler.borrow_mut().push(handler);
+            }
 
             Ok(ui)
         }
