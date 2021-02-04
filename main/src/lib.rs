@@ -75,6 +75,7 @@ pub fn clean_list(list: &[String]) -> Vec<String> {
 pub struct Config {
     pub hosts_path: String,
     pub names: Vec<String>,
+    pub ip: Option<String>,
 }
 
 pub struct Access {
@@ -125,6 +126,7 @@ impl Config {
         Config {
             hosts_path: path.to_owned(),
             names: vec![],
+            ip: None,
         }
     }
 
@@ -141,21 +143,23 @@ impl Config {
         Ok(reader.lines().filter_map(|s| s.ok()).collect())
     }
 
-    pub fn apply_names(&self, lines: &[String]) -> Vec<String> {
+    pub fn apply_names(&mut self, lines: &[String]) -> Vec<String> {
         let mut list = lines.to_owned();
 
         if let Ok(ip) = find_wsl_ip() {
             list.extend(
                 self.names
                     .iter()
-                    .map(|name| format!("{} {} {}", ip, name, HOSTS_COMMENT)),
+                    .map(|name| format!("{} {} {}", &ip, name, HOSTS_COMMENT)),
             );
+
+            self.ip = Some(ip);
         }
 
         list
     }
 
-    pub fn write_file(&self) -> Result<(), String> {
+    pub fn write_file(&mut self) -> Result<(), String> {
         let access = self.check_hosts_path();
 
         if false == access.write {

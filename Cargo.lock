@@ -194,7 +194,7 @@ dependencies = [
 
 [[package]]
 name = "main"
-version = "1.4.0"
+version = "1.4.1"
 dependencies = [
  "faccess",
 ]
@@ -520,7 +520,7 @@ dependencies = [
 
 [[package]]
 name = "wsl2-ip-host-cli"
-version = "1.4.0"
+version = "1.4.1"
 dependencies = [
  "main",
 ]

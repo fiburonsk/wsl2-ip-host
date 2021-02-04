@@ -87,17 +87,28 @@ mod app {
         std::fs::write(path, json).map_err(|e| format!("{}", e))
     }
 
-    fn notify() {
-        match notify_rust::Notification::new()
-            .appname("wsl2-ip-host")
-            .auto_icon()
-            .timeout(5000)
-            .summary("Wrote to hosts file")
-            .body("Applied ip and domain names to the hosts file.")
-            .show()
-        {
-            Ok(_) => (),
-            Err(_) => (),
+    fn notify(state: &lib::Config) {
+        if let Some(ip) = state.ip.clone() {
+            let text = state
+                .names
+                .iter()
+                .map(|name| format!("{} {}", &ip, name))
+                .collect::<Vec<String>>()
+                .join("\r\n");
+            match notify_rust::Notification::new()
+                .appname("wsl2-ip-host")
+                .auto_icon()
+                .timeout(5000)
+                .summary("Wrote to hosts file")
+                .body(&format!(
+                    "Applied the following domains to the hosts file. \r\n\r\n{}",
+                    &text
+                ))
+                .show()
+            {
+                Ok(_) => (),
+                Err(_) => (),
+            }
         }
     }
 
@@ -115,13 +126,13 @@ mod app {
         while let Ok(cmd) = cmd_rx.recv() {
             match cmd {
                 Cmd::OnInit => {
-                    match state.read() {
-                        Ok(s) => {
+                    match state.write() {
+                        Ok(mut s) => {
                             main_tx.send(Cmd::State(s.clone())).unwrap();
 
                             if std::env::args().any(|a| a == "--run") {
                                 match s.write_file() {
-                                    Ok(()) => notify(),
+                                    Ok(()) => notify(&s),
                                     _ => (),
                                 };
                             }
@@ -175,8 +186,8 @@ mod app {
                     };
                 }
 
-                Cmd::Preview => match state.read() {
-                    Ok(s) => match s
+                Cmd::Preview => match state.write() {
+                    Ok(mut s) => match s
                         .read_file()
                         .and_then(|l| Ok(lib::clean_list(&l)))
                         .and_then(|l| Ok(s.apply_names(&l)))
@@ -205,12 +216,12 @@ mod app {
                 }
 
                 Cmd::Write => match state.write() {
-                    Ok(s) => match s.write_file() {
+                    Ok(mut s) => match s.write_file() {
                         Ok(()) => {
                             main_tx
                                 .send(Cmd::Content("Wrote changes to hosts file.".to_owned()))
                                 .unwrap();
-                            notify();
+                            notify(&s);
                         }
                         Err(e) => main_tx.send(Cmd::Content(format!("{}", e))).unwrap(),
                     },
