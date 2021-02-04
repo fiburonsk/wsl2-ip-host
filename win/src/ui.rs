@@ -54,7 +54,11 @@ pub struct Options {
 pub struct AboutUi {
     window: nwg::Window,
     layout: nwg::GridLayout,
-    message: nwg::Label,
+    font: nwg::Font,
+    version: nwg::Label,
+    message1: nwg::Label,
+    message2: nwg::Label,
+    message3: nwg::Label,
     ok: nwg::Button,
 }
 
@@ -387,7 +391,7 @@ pub mod ui {
 
             nwg::Window::builder()
                 .flags(nwg::WindowFlags::WINDOW)
-                .size((200, 160))
+                .size((400, 270))
                 .center(true)
                 .title("About")
                 .parent(Some(&parent))
@@ -397,8 +401,31 @@ pub mod ui {
                 .text(&format!("wsl2-ip-host\r\nversion: {}", VERSION))
                 .flags(nwg::LabelFlags::VISIBLE)
                 .parent(&data.window)
-                .h_align(nwg::HTextAlign::Center)
-                .build(&mut data.message)?;
+                .build(&mut data.version)?;
+
+            nwg::Font::builder()
+                .family("Courier New")
+                .size(14)
+                .build(&mut data.font)?;
+
+            nwg::Label::builder()
+                .text("Finds the windows subsystem for linux IPv4 address\r\nand writes entries in the hosts file.\r\n")
+                .flags(nwg::LabelFlags::VISIBLE)
+                .parent(&data.window)
+                .font(Some(&data.font))
+                .build(&mut data.message1)?;
+            nwg::Label::builder()
+                .text("Usage: \"wsl2-ip-host-gui --run\" to immediately write\r\nto the hosts file on startup. --run is optional.\r\n")
+                .flags(nwg::LabelFlags::VISIBLE)
+                .parent(&data.window)
+                .font(Some(&data.font))
+                .build(&mut data.message2)?;
+            nwg::Label::builder()
+                .text("\"Menu -> Save Config\" saves settings which are \r\nautomatically loaded on startup.\r\n")
+                .flags(nwg::LabelFlags::VISIBLE)
+                .parent(&data.window)
+                .font(Some(&data.font))
+                .build(&mut data.message3)?;
 
             nwg::Button::builder()
                 .text("Ok")
@@ -408,8 +435,11 @@ pub mod ui {
             nwg::GridLayout::builder()
                 .parent(&data.window)
                 .spacing(4)
-                .child_item(nwg::GridLayoutItem::new(&data.message, 0, 0, 2, 2))
-                .child(1, 2, &data.ok)
+                .child_item(nwg::GridLayoutItem::new(&data.version, 0, 0, 3, 1))
+                .child_item(nwg::GridLayoutItem::new(&data.message1, 0, 1, 3, 1))
+                .child_item(nwg::GridLayoutItem::new(&data.message2, 0, 2, 3, 1))
+                .child_item(nwg::GridLayoutItem::new(&data.message3, 0, 3, 3, 1))
+                .child(2, 4, &data.ok)
                 .build(&mut data.layout)?;
 
             Ok(())
