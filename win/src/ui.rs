@@ -145,6 +145,13 @@ pub mod ui {
             }
         }
 
+        fn on_domain_text_change(&self) {
+            self.options
+                .names_ui
+                .names_add
+                .set_enabled(self.options.names_ui.names_input.text().len() > 0)
+        }
+
         fn update_buttons(&self, access: lib::Access) {
             self.tray.tray_run.set_enabled(access.write);
             self.actions_ui.write_button.set_enabled(access.write);
@@ -167,6 +174,10 @@ pub mod ui {
                             .set_text(0, "Insufficient access to write to hosts file.");
                     }
                     self.update_buttons(access);
+                    self.options
+                        .names_ui
+                        .names_add
+                        .set_enabled(self.options.names_ui.names_input.text().len() > 0)
                 }
                 Ok(Cmd::Content(s)) => {
                     self.status.set_text(0, &s);
@@ -189,6 +200,10 @@ pub mod ui {
 
         fn add_name(&self) {
             let name = self.options.names_ui.names_input.text().to_owned();
+            if name.len() == 0 {
+                self.status.set_text(0, "Can not add an empty domain.");
+                return;
+            }
             self.tx.send(Cmd::AddName(name)).unwrap();
             if let Ok(Cmd::State(c)) = self.rx.recv() {
                 self.options
@@ -762,6 +777,11 @@ pub mod ui {
                         evt_ui.about_ui.process_event(evt, &evt_data, handle);
 
                         match evt {
+                            Event::OnTextInput => {
+                                if &handle == &evt_ui.options.names_ui.names_input {
+                                    Main::on_domain_text_change(&evt_ui);
+                                }
+                            }
                             Event::OnContextMenu => {
                                 if &handle == &evt_ui.tray.tray {
                                     Main::show_menu(&evt_ui);
