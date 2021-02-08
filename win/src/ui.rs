@@ -3,7 +3,7 @@ use std::sync::mpsc;
 
 use crate::app::Cmd;
 
-const ICON_DATA: &[u8] = std::include_bytes!("./../resources/icon.png");
+const ICON_DATA: &[u8] = std::include_bytes!("./../../resources/icon.ico");
 
 // pub fn begin(tx: std::sync::mpsc::Sender<Cmd>, rx: std::sync::mpsc::Receiver<Cmd>) {
 pub fn begin(tx: mpsc::Sender<Cmd>, rx: mpsc::Receiver<Cmd>) {
@@ -153,11 +153,10 @@ pub mod ui {
         }
 
         fn update_buttons(&self, access: lib::Access) {
-            self.tray.tray_run.set_enabled(access.write);
-            self.actions_ui.write_button.set_enabled(access.write);
             self.actions_ui.preview_button.set_enabled(access.read);
             self.options.view_hosts_button.set_enabled(access.read);
         }
+
         fn on_init(&self) {
             self.tx.send(Cmd::OnInit).unwrap();
             match self.rx.recv() {
@@ -169,10 +168,7 @@ pub mod ui {
                         .set_collection(c.names.to_owned());
 
                     let access = c.check_hosts_path();
-                    if false == access.write {
-                        self.status
-                            .set_text(0, "Insufficient access to write to hosts file.");
-                    }
+
                     self.update_buttons(access);
                     self.options
                         .names_ui

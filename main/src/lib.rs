@@ -17,10 +17,10 @@ mod util {
 }
 
 #[cfg(target_family = "windows")]
-mod util {
+pub mod util {
     use std::os::windows::process::CommandExt;
 
-    const CREATE_NO_WINDOW: u32 = 0x08000000;
+    pub const CREATE_NO_WINDOW: u32 = 0x08000000;
     pub const DEFAULT_HOSTS_PATH: &str = "C:\\Windows\\System32\\drivers\\etc\\hosts";
 
     pub fn run_wsl_ip_cmd() -> Result<std::process::Output, String> {
@@ -172,6 +172,42 @@ impl Config {
         let lines = self.read_file()?;
         let lines = clean_list(&lines);
         let lines = self.apply_names(&lines);
+
+        use std::io::Write;
+        let mut file = std::fs::File::create(access.path).map_err(|e| format!("{}", e))?;
+
+        lines.iter().for_each(|l| {
+            writeln!(&mut file, "{}", l).unwrap();
+        });
+
+        Ok(())
+    }
+
+    pub fn apply_names_ip(&self, ip: &str, lines: &[String]) -> Vec<String> {
+        let mut list = lines.to_owned();
+
+        list.extend(
+            self.names
+                .iter()
+                .map(|name| format!("{} {} {}", &ip, name, HOSTS_COMMENT)),
+        );
+
+        list
+    }
+
+    pub fn write_file_ip(&self, ip: &str) -> Result<(), String> {
+        let access = self.check_hosts_path();
+
+        if false == access.write {
+            return Err(format!(
+                "Insufficient access to write file {}",
+                self.hosts_path
+            ));
+        }
+
+        let lines = self.read_file()?;
+        let lines = clean_list(&lines);
+        let lines = self.apply_names_ip(ip, &lines);
 
         use std::io::Write;
         let mut file = std::fs::File::create(access.path).map_err(|e| format!("{}", e))?;

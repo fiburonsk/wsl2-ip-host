@@ -14,8 +14,7 @@ I use a scheduled task in windows to run this on login and refresh the wsl ip in
 
 ### Windows GUI
 
-`wsl2-ip-host-gui.exe` is an alternative way to run the app.  It runs in the 
-background with a system tray icon.  Right clicking and selecting `Write` will overwrite the hosts file.  A configuration file can be saved in your home folder as `.wsl2-ip-host.json` and will automatically attempt to be read on startup.  If using in a scheduled task you can pass the `--run` argument to trigger a write immediately after initialization: `wsl2-ip-host-gui.exe --run`.  Selecting open allows configuring the app and saving for future runs.  The hosts file can be viewed and the changes previewed.
+`wsl2-ip-host-gui.exe` is an alternative way to run the app.  `wsl2-ip-host-writer.exe` should be in your path somewhere.  The GUI app runs in the background with a system tray icon.  Right clicking and selecting `Write` will execute the `wsl2-ip-host-writer.exe` app which will prompt to elevate privileges and write the hosts file.  A configuration file can be saved in your home folder as `.wsl2-ip-host.json` and will automatically attempt to be read on startup.  If using in a scheduled task you can pass the `--run` argument to trigger a write immediately after initialization: `wsl2-ip-host-gui.exe --run`.  Selecting open allows configuring the app and saving for future runs.  The hosts file can be viewed and the changes previewed.
 
 ## From WSL2
 

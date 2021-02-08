@@ -1,0 +1,17 @@
+[package]
+name = "wsl2-ip-host-writer"
+version = "1.1.0"
+authors = ["fiburonsk <10441670+fiburonsk@users.noreply.github.com>"]
+edition = "2018"
+build = "build.rs"
+
+[[bin]]
+name = "wsl2-ip-host-writer"
+path = "src/main.rs"
+
+[dependencies]
+main = { path = "../main" }
+
+[build-dependencies]
+embed-resource = "1.5"
+winres = "0.1"

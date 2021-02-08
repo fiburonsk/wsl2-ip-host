@@ -38,7 +38,6 @@ mod app {
         State(lib::Config),
         Write,
     }
-
     #[derive(Serialize, Deserialize)]
     struct SaveConfig {
         hosts_path: String,
@@ -46,6 +45,20 @@ mod app {
     }
 
     const SAVE_NAME: &str = ".wsl2-ip-host.json";
+
+    fn save_config(config: &lib::Config) -> Result<(), String> {
+        let save = {
+            SaveConfig {
+                hosts_path: config.hosts_path.to_owned(),
+                domains: config.names.to_owned(),
+            }
+        };
+
+        let json = serde_json::to_string_pretty(&save).map_err(|e| format!("{}", e))?;
+        let path = save_path()?;
+
+        std::fs::write(path, json).map_err(|e| format!("{}", e))
+    }
 
     fn save_path() -> Result<std::path::PathBuf, String> {
         match home::home_dir() {
@@ -73,42 +86,24 @@ mod app {
         Ok(config)
     }
 
-    fn save_config(config: &lib::Config) -> Result<(), String> {
-        let save = {
-            SaveConfig {
-                hosts_path: config.hosts_path.to_owned(),
-                domains: config.names.to_owned(),
-            }
-        };
+    fn notify(ip: &str, domains: &str) {
+        let text = domains
+            .split(",")
+            .map(|name| format!("{} {}", &ip, name))
+            .collect::<Vec<String>>()
+            .join("\r\n");
 
-        let json = serde_json::to_string_pretty(&save).map_err(|e| format!("{}", e))?;
-        let path = save_path()?;
-
-        std::fs::write(path, json).map_err(|e| format!("{}", e))
-    }
-
-    fn notify(state: &lib::Config) {
-        if let Some(ip) = state.ip.clone() {
-            let text = state
-                .names
-                .iter()
-                .map(|name| format!("{} {}", &ip, name))
-                .collect::<Vec<String>>()
-                .join("\r\n");
-            match notify_rust::Notification::new()
-                .appname("wsl2-ip-host")
-                .auto_icon()
-                .timeout(5000)
-                .summary("Wrote to hosts file")
-                .body(&format!(
-                    "Applied the following domains to the hosts file. \r\n\r\n{}",
-                    &text
-                ))
-                .show()
-            {
-                Ok(_) => (),
-                Err(_) => (),
-            }
+        match notify_rust::Notification::new()
+            .timeout(5000)
+            .summary("Wrote to hosts file")
+            .body(&format!(
+                "Applied the following domains to the hosts file. \r\n\r\n{}",
+                &text
+            ))
+            .show()
+        {
+            Ok(_) => (),
+            Err(_) => (),
         }
     }
 
@@ -126,13 +121,13 @@ mod app {
         while let Ok(cmd) = cmd_rx.recv() {
             match cmd {
                 Cmd::OnInit => {
-                    match state.write() {
-                        Ok(mut s) => {
+                    match state.read() {
+                        Ok(s) => {
                             main_tx.send(Cmd::State(s.clone())).unwrap();
 
                             if std::env::args().any(|a| a == "--run") {
-                                match s.write_file() {
-                                    Ok(()) => notify(&s),
+                                match write_changes(&s) {
+                                    Ok(()) => (),
                                     _ => (),
                                 };
                             }
@@ -215,20 +210,17 @@ mod app {
                     };
                 }
 
-                Cmd::Write => match state.write() {
-                    Ok(mut s) => match s.write_file() {
-                        Ok(()) => {
-                            main_tx
-                                .send(Cmd::Content("Wrote changes to hosts file.".to_owned()))
-                                .unwrap();
-                            notify(&s);
-                        }
-                        Err(e) => main_tx.send(Cmd::Content(format!("{}", e))).unwrap(),
-                    },
-                    _ => main_tx
-                        .send(Cmd::Content("Unable to read app state.".to_owned()))
-                        .unwrap(),
-                },
+                Cmd::Write => {
+                    match state.read() {
+                        Ok(s) => match write_changes(&s) {
+                            Ok(()) => main_tx.send(Cmd::Content("Saved.".to_owned())).unwrap(),
+                            Err(e) => main_tx.send(Cmd::Content(e.to_owned())).unwrap(),
+                        },
+                        _ => main_tx
+                            .send(Cmd::Content("Unable to read app state.".to_owned()))
+                            .unwrap(),
+                    };
+                }
 
                 Cmd::Quit => {
                     break;
@@ -240,6 +232,46 @@ mod app {
         drop(cmd_rx);
 
         handle.join().unwrap();
+        Ok(())
+    }
+
+    fn write_changes(state: &lib::Config) -> Result<(), String> {
+        use std::ffi::OsStr;
+        use std::iter::once;
+        use std::os::windows::ffi::OsStrExt;
+        use std::ptr;
+        use winapi::ctypes::c_int;
+        use winapi::um::shellapi::ShellExecuteW;
+
+        let verb: Vec<u16> = OsStr::new("open").encode_wide().chain(once(0)).collect();
+
+        let ip = lib::find_wsl_ip()?;
+        let names = state.names.join(",");
+        let path = &state.hosts_path;
+
+        let file: Vec<u16> = OsStr::new("wsl2-ip-host-writer.exe")
+            .encode_wide()
+            .chain(once(0))
+            .collect();
+
+        let args: Vec<u16> = OsStr::new(format!("{} {} {}", ip, names, path).as_str())
+            .encode_wide()
+            .chain(once(0))
+            .collect();
+
+        unsafe {
+            ShellExecuteW(
+                ptr::null_mut(),
+                verb.as_ptr(),
+                file.as_ptr(),
+                args.as_ptr(),
+                ptr::null(),
+                c_int::from(0),
+            )
+        };
+
+        notify(&ip, &names);
+
         Ok(())
     }
 }
