@@ -259,7 +259,7 @@ mod app {
             .chain(once(0))
             .collect();
 
-        unsafe {
+        let ret = unsafe {
             ShellExecuteW(
                 ptr::null_mut(),
                 verb.as_ptr(),
@@ -270,8 +270,11 @@ mod app {
             )
         };
 
-        notify(&ip, &names);
-
-        Ok(())
+        if ret as i32 > 31 {
+            notify(&ip, &names);
+            Ok(())
+        } else {
+            Err("Unable to run wsl2-ip-host-writer.".to_owned())
+        }
     }
 }
