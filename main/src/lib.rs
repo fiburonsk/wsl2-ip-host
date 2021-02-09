@@ -1,29 +1,13 @@
+use faccess::PathExt;
 use std::io::BufRead;
 
-use faccess::PathExt;
-
-#[cfg(target_family = "unix")]
 mod util {
-    pub const DEFAULT_HOSTS_PATH: &str = "/mnt/c/Windows/System32/drivers/etc/hosts";
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
+    pub const HOSTS_COMMENT: &str = "# added by wsl2-ip-host";
 
     pub fn run_wsl_ip_cmd() -> Result<std::process::Output, String> {
-        let args = vec!["-4", "-br", "address", "show", "eth0"];
+        use std::os::windows::process::CommandExt;
 
-        std::process::Command::new("ip")
-            .args(args)
-            .output()
-            .map_err(|e| format!("{}", e))
-    }
-}
-
-#[cfg(target_family = "windows")]
-pub mod util {
-    use std::os::windows::process::CommandExt;
-
-    pub const CREATE_NO_WINDOW: u32 = 0x08000000;
-    pub const DEFAULT_HOSTS_PATH: &str = "C:\\Windows\\System32\\drivers\\etc\\hosts";
-
-    pub fn run_wsl_ip_cmd() -> Result<std::process::Output, String> {
         let args = vec!["--", "ip", "-4", "-br", "address", "show", "eth0"];
 
         let mut cmd = std::process::Command::new("wsl.exe");
@@ -31,11 +15,62 @@ pub mod util {
         cmd.creation_flags(CREATE_NO_WINDOW);
         cmd.output().map_err(|e| format!("{}", e))
     }
+
+    pub fn clean_list(list: &[String]) -> Vec<String> {
+        list.to_owned()
+            .into_iter()
+            .filter_map(|line| {
+                if line.contains(HOSTS_COMMENT) {
+                    None
+                } else {
+                    Some(line)
+                }
+            })
+            .collect()
+    }
+
+    pub fn null_text(text: &str) -> Vec<u16> {
+        use std::ffi::OsStr;
+        use std::iter::once;
+        use std::os::windows::ffi::OsStrExt;
+
+        OsStr::new(text).encode_wide().chain(once(0)).collect()
+    }
 }
 
-pub const HOSTS_COMMENT: &str = "# added by wsl2-ip-host";
+pub const DEFAULT_HOSTS_PATH: &str = "C:\\Windows\\System32\\drivers\\etc\\hosts";
 pub const DEFAULT_HOST: &str = "host.wsl.internal";
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+/// shells to wsl2-ip-host-writer to build a config and write
+pub fn write_changes(ip: &str, state: &Config) -> Result<(), String> {
+    use std::ptr;
+    use winapi::ctypes::c_int;
+    use winapi::um::shellapi::ShellExecuteW;
+
+    let verb: Vec<u16> = util::null_text("open");
+    let names = state.names.join(",");
+    let path = &state.hosts_path;
+    let file = util::null_text("wsl2-ip-host-writer.exe");
+    let args = util::null_text(format!("{} {} {}", ip, names, path).as_str());
+
+    let ret = unsafe {
+        ShellExecuteW(
+            ptr::null_mut(),
+            verb.as_ptr(),
+            file.as_ptr(),
+            args.as_ptr(),
+            ptr::null(),
+            c_int::from(0),
+        )
+    };
+
+    if ret as i32 > 31 {
+        Ok(())
+    } else {
+        Err("Unable to run wsl2-ip-host-writer.".to_owned())
+    }
+}
 
 pub fn find_wsl_ip() -> Result<String, String> {
     let output = util::run_wsl_ip_cmd()?;
@@ -58,24 +93,10 @@ pub fn find_wsl_ip() -> Result<String, String> {
     }
 }
 
-pub fn clean_list(list: &[String]) -> Vec<String> {
-    list.to_owned()
-        .into_iter()
-        .filter_map(|line| {
-            if line.contains(HOSTS_COMMENT) {
-                None
-            } else {
-                Some(line)
-            }
-        })
-        .collect()
-}
-
 #[derive(Clone)]
 pub struct Config {
     pub hosts_path: String,
     pub names: Vec<String>,
-    pub ip: Option<String>,
 }
 
 pub struct Access {
@@ -86,7 +107,7 @@ pub struct Access {
 
 impl Config {
     pub fn new() -> Config {
-        Config::with_hosts_path(util::DEFAULT_HOSTS_PATH)
+        Config::with_hosts_path(DEFAULT_HOSTS_PATH)
     }
 
     pub fn set_hosts_path(&mut self, path: &str) {
@@ -126,7 +147,6 @@ impl Config {
         Config {
             hosts_path: path.to_owned(),
             names: vec![],
-            ip: None,
         }
     }
 
@@ -143,59 +163,25 @@ impl Config {
         Ok(reader.lines().filter_map(|s| s.ok()).collect())
     }
 
-    pub fn apply_names(&mut self, lines: &[String]) -> Vec<String> {
-        let mut list = lines.to_owned();
-
-        if let Ok(ip) = find_wsl_ip() {
-            list.extend(
-                self.names
-                    .iter()
-                    .map(|name| format!("{} {} {}", &ip, name, HOSTS_COMMENT)),
-            );
-
-            self.ip = Some(ip);
-        }
-
-        list
-    }
-
-    pub fn write_file(&mut self) -> Result<(), String> {
-        let access = self.check_hosts_path();
-
-        if false == access.write {
-            return Err(format!(
-                "Insufficient access to write file {}",
-                self.hosts_path
-            ));
-        }
-
-        let lines = self.read_file()?;
-        let lines = clean_list(&lines);
-        let lines = self.apply_names(&lines);
-
-        use std::io::Write;
-        let mut file = std::fs::File::create(access.path).map_err(|e| format!("{}", e))?;
-
-        lines.iter().for_each(|l| {
-            writeln!(&mut file, "{}", l).unwrap();
-        });
-
-        Ok(())
-    }
-
-    pub fn apply_names_ip(&self, ip: &str, lines: &[String]) -> Vec<String> {
+    pub fn apply_names(&self, ip: &str, lines: &[String]) -> Vec<String> {
         let mut list = lines.to_owned();
 
         list.extend(
             self.names
                 .iter()
-                .map(|name| format!("{} {} {}", &ip, name, HOSTS_COMMENT)),
+                .map(|name| format!("{} {} {}", &ip, name, util::HOSTS_COMMENT)),
         );
 
         list
     }
 
-    pub fn write_file_ip(&self, ip: &str) -> Result<(), String> {
+    pub fn preview(&self, ip: &str) -> Result<Vec<String>, String> {
+        let lines = self.read_file()?;
+        let lines = util::clean_list(&lines);
+        Ok(self.apply_names(ip, &lines))
+    }
+
+    pub fn write_file(&self, ip: &str) -> Result<(), String> {
         let access = self.check_hosts_path();
 
         if false == access.write {
@@ -205,9 +191,7 @@ impl Config {
             ));
         }
 
-        let lines = self.read_file()?;
-        let lines = clean_list(&lines);
-        let lines = self.apply_names_ip(ip, &lines);
+        let lines = self.preview(ip)?;
 
         use std::io::Write;
         let mut file = std::fs::File::create(access.path).map_err(|e| format!("{}", e))?;

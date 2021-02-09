@@ -28,9 +28,7 @@ mod app {
         let domains = i.next().unwrap();
         let path = i.next().unwrap();
 
-        save(&path, &domains, &ip)?;
-
-        Ok(())
+        save(&path, &domains, &ip)
     }
 
     fn save(path: &str, domains: &str, ip: &str) -> Result<(), String> {
@@ -39,7 +37,6 @@ mod app {
             config.add_name(d.to_owned());
         }
 
-        config.write_file_ip(ip)?;
-        Ok(())
+        config.write_file(ip)
     }
 }

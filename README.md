@@ -1,24 +1,39 @@
 # wsl2-ip-host
 
-## From windows
-
 * Windows 10
 * Requires that wsl.exe be installed and in your path.
-* Access to write to the windows hosts file
 * A wsl distro be installed
 * `ip` command available in a wsl distro with eth0 adapter
 
-This application runs `ip -4 -br address show eth0` inside of the default wsl distro to get the IP address and then appends it to the hosts file with a domain of `host.wsl.internal`.  The domain can be changed using the `-n` or `--name` option.  You can supply multiple domains by passing the `--name` option multiple times.
+This application runs `ip -4 -br address show eth0` inside of the default wsl distro to get the IP address.  This ip address is used for writing entries into the hosts file.  The default domain is `host.wsl.internal`.  
 
-I use a scheduled task in windows to run this on login and refresh the wsl ip in the hosts file since the IP changes after every reboot.
+I use wsl2-ip-host.exe as a scheduled task that begins on logon to write the wsl2 ip right away since it changes on restart.
 
-### Windows GUI
+## wsl2-ip-host.exe
 
-`wsl2-ip-host-gui.exe` is an alternative way to run the app.  `wsl2-ip-host-writer.exe` should be in your path somewhere.  The GUI app runs in the background with a system tray icon.  Right clicking and selecting `Write` will execute the `wsl2-ip-host-writer.exe` app which will prompt to elevate privileges and write the hosts file.  A configuration file can be saved in your home folder as `.wsl2-ip-host.json` and will automatically attempt to be read on startup.  If using in a scheduled task you can pass the `--run` argument to trigger a write immediately after initialization: `wsl2-ip-host-gui.exe --run`.  Selecting open allows configuring the app and saving for future runs.  The hosts file can be viewed and the changes previewed.
+A windows tool that lives in the system tray where a convenient write action is available.  Domains can be configured within the `open` window as well as selecting a different host file path in case it were to be needed.  The configuration can be saved through the menu option at the top.  The configuration is saved at ~/.wsl2-ip-host.json and this file is automatically loaded on startup.
 
-## From WSL2
+## wsl2-ip-host-writer.exe
 
-* Write access to `/mnt/c/Windows/System32/Drivers/etc/hosts`
-* `ip` command and an eth0 adapter
+This application does the work of writing the IP to the hosts file.  It requires elevated privileges to run and will prompt first.
 
-This command could be placed inside a .bashrc or equivalent but will only run when a new shell is started rather than automatically when wsl is started.
+## wsl2-ip-host-cli.exe
+
+A cli utility to call the writer and write changes to the hosts file.
+
+```
+Usage: wsl2-ip-host [-n <host-name>] ...
+
+Uses wsl to retrieve the IP address of a wsl vm and writes it to the windows hostsfile.
+
+Options:
+-n, --name <host-name>      Host name to associate the ip to [default: host.wsl.internal]
+                            this option can be passed multiple times to add more than one host name.
+-h, --help                  Display help text
+```
+
+The domain can be changed using the `-n` or `--name` option.  You can supply multiple domains by passing the `-n` or `--name` option multiple times.
+
+## Build
+
+clone the repository and use `cargo build` or `cargo build --release`. I have only built this with the `stable-x86_64-pc-windows-msvc` toolchain.

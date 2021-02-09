@@ -18,6 +18,7 @@ fn main() {
 #[cfg(target_os = "windows")]
 mod app {
     use crate::ui;
+    use lib::find_wsl_ip;
     use main as lib;
     use serde::{Deserialize, Serialize};
     use serde_json;
@@ -86,9 +87,9 @@ mod app {
         Ok(config)
     }
 
-    fn notify(ip: &str, domains: &str) {
+    fn notify(ip: &str, domains: &Vec<String>) {
         let text = domains
-            .split(",")
+            .iter()
             .map(|name| format!("{} {}", &ip, name))
             .collect::<Vec<String>>()
             .join("\r\n");
@@ -120,23 +121,25 @@ mod app {
 
         while let Ok(cmd) = cmd_rx.recv() {
             match cmd {
-                Cmd::OnInit => {
-                    match state.read() {
-                        Ok(s) => {
-                            main_tx.send(Cmd::State(s.clone())).unwrap();
+                Cmd::OnInit => match state.read() {
+                    Ok(s) => {
+                        main_tx.send(Cmd::State(s.clone())).unwrap();
 
-                            if std::env::args().any(|a| a == "--run") {
-                                match write_changes(&s) {
-                                    Ok(()) => (),
-                                    _ => (),
-                                };
-                            }
+                        if std::env::args().any(|a| a == "--run") {
+                            match find_wsl_ip() {
+                                Ok(ip) => match lib::write_changes(&ip, &s) {
+                                    Ok(_) => notify(&ip, &s.names),
+                                    Err(_) => (),
+                                },
+                                _ => (),
+                            };
                         }
-                        _ => main_tx
-                            .send(Cmd::Content("Unable to initialize state.".to_owned()))
-                            .unwrap(),
-                    };
-                }
+                    }
+                    _ => main_tx
+                        .send(Cmd::Content("Unable to initialize state.".to_owned()))
+                        .unwrap(),
+                },
+
                 Cmd::AddName(name) => {
                     if let Ok(mut s) = state.write() {
                         s.add_name(name);
@@ -159,68 +162,64 @@ mod app {
                     };
                 }
 
-                Cmd::SetHostsFile(path) => {
-                    match state.write() {
-                        Ok(mut s) => {
-                            s.set_hosts_path(&path);
-                            main_tx.send(Cmd::State(s.clone())).unwrap();
-                        }
-                        _ => main_tx.send(Cmd::None).unwrap(),
-                    };
-                }
+                Cmd::SetHostsFile(path) => match state.write() {
+                    Ok(mut s) => {
+                        s.set_hosts_path(&path);
+                        main_tx.send(Cmd::State(s.clone())).unwrap();
+                    }
+                    _ => main_tx.send(Cmd::None).unwrap(),
+                },
 
-                Cmd::ReadFile => {
-                    match state.read() {
-                        Ok(s) => match s.read_file() {
-                            Ok(c) => main_tx
-                                .send(Cmd::Content(c.join("\r\n").to_owned()))
-                                .unwrap(),
-                            _ => main_tx.send(Cmd::None).unwrap(),
-                        },
+                Cmd::ReadFile => match state.read() {
+                    Ok(s) => match s.read_file() {
+                        Ok(c) => main_tx
+                            .send(Cmd::Content(c.join("\r\n").to_owned()))
+                            .unwrap(),
                         _ => main_tx.send(Cmd::None).unwrap(),
-                    };
-                }
-
-                Cmd::Preview => match state.write() {
-                    Ok(mut s) => match s
-                        .read_file()
-                        .and_then(|l| Ok(lib::clean_list(&l)))
-                        .and_then(|l| Ok(s.apply_names(&l)))
-                    {
-                        Ok(l) => main_tx.send(Cmd::Content(l.join("\r\n"))).unwrap(),
-                        Err(_) => main_tx.send(Cmd::None).unwrap(),
                     },
                     _ => main_tx.send(Cmd::None).unwrap(),
                 },
 
-                Cmd::SaveConfig => {
-                    match state.read() {
-                        Ok(s) => match save_config(&s) {
-                            Ok(()) => main_tx
-                                .send(Cmd::Content(format!(
-                                    "saved to {}",
-                                    save_path().unwrap().to_str().unwrap().to_owned()
-                                )))
-                                .unwrap(),
-                            Err(e) => main_tx.send(Cmd::Content(format!("{}", e))).unwrap(),
+                Cmd::Preview => match lib::find_wsl_ip() {
+                    Ok(ip) => match state.read() {
+                        Ok(s) => match s.preview(&ip) {
+                            Ok(l) => main_tx.send(Cmd::Content(l.join("\r\n"))).unwrap(),
+                            Err(_) => main_tx.send(Cmd::None).unwrap(),
                         },
-                        _ => main_tx
-                            .send(Cmd::Content("Unable to read app state.".to_owned()))
-                            .unwrap(),
-                    };
-                }
+                        _ => main_tx.send(Cmd::None).unwrap(),
+                    },
+                    _ => main_tx.send(Cmd::None).unwrap(),
+                },
 
-                Cmd::Write => {
-                    match state.read() {
-                        Ok(s) => match write_changes(&s) {
+                Cmd::SaveConfig => match state.read() {
+                    Ok(s) => match save_config(&s) {
+                        Ok(()) => main_tx
+                            .send(Cmd::Content(format!(
+                                "saved to {}",
+                                save_path().unwrap().to_str().unwrap().to_owned()
+                            )))
+                            .unwrap(),
+                        Err(e) => main_tx.send(Cmd::Content(format!("{}", e))).unwrap(),
+                    },
+                    _ => main_tx
+                        .send(Cmd::Content("Unable to read app state.".to_owned()))
+                        .unwrap(),
+                },
+
+                Cmd::Write => match find_wsl_ip() {
+                    Ok(ip) => match state.read() {
+                        Ok(s) => match lib::write_changes(&ip, &s) {
                             Ok(()) => main_tx.send(Cmd::Content("Saved.".to_owned())).unwrap(),
                             Err(e) => main_tx.send(Cmd::Content(e.to_owned())).unwrap(),
                         },
                         _ => main_tx
                             .send(Cmd::Content("Unable to read app state.".to_owned()))
                             .unwrap(),
-                    };
-                }
+                    },
+                    _ => main_tx
+                        .send(Cmd::Content("Unable to read ip from wsl2.".to_owned()))
+                        .unwrap(),
+                },
 
                 Cmd::Quit => {
                     break;
@@ -233,48 +232,5 @@ mod app {
 
         handle.join().unwrap();
         Ok(())
-    }
-
-    fn write_changes(state: &lib::Config) -> Result<(), String> {
-        use std::ffi::OsStr;
-        use std::iter::once;
-        use std::os::windows::ffi::OsStrExt;
-        use std::ptr;
-        use winapi::ctypes::c_int;
-        use winapi::um::shellapi::ShellExecuteW;
-
-        let verb: Vec<u16> = OsStr::new("open").encode_wide().chain(once(0)).collect();
-
-        let ip = lib::find_wsl_ip()?;
-        let names = state.names.join(",");
-        let path = &state.hosts_path;
-
-        let file: Vec<u16> = OsStr::new("wsl2-ip-host-writer.exe")
-            .encode_wide()
-            .chain(once(0))
-            .collect();
-
-        let args: Vec<u16> = OsStr::new(format!("{} {} {}", ip, names, path).as_str())
-            .encode_wide()
-            .chain(once(0))
-            .collect();
-
-        let ret = unsafe {
-            ShellExecuteW(
-                ptr::null_mut(),
-                verb.as_ptr(),
-                file.as_ptr(),
-                args.as_ptr(),
-                ptr::null(),
-                c_int::from(0),
-            )
-        };
-
-        if ret as i32 > 31 {
-            notify(&ip, &names);
-            Ok(())
-        } else {
-            Err("Unable to run wsl2-ip-host-writer.".to_owned())
-        }
     }
 }
