@@ -9,6 +9,8 @@ This application runs `ip -4 -br address show eth0` inside of the default wsl di
 
 I use wsl2-ip-host.exe as a scheduled task that begins on logon to write the wsl2 ip right away since it changes on restart.
 
+`wsl2-ip-host.exe` and `wsl2-ip-host-cli.exe` both require that `wsl2-ip-host-writer.exe` be either in the same folder or in your path so that it can be found and run. 
+
 ## wsl2-ip-host.exe
 
 A windows tool that lives in the system tray where a convenient write action is available.  Domains can be configured within the `open` window as well as selecting a different host file path in case it were to be needed.  The configuration can be saved through the menu option at the top.  The configuration is saved at ~/.wsl2-ip-host.json and this file is automatically loaded on startup.
