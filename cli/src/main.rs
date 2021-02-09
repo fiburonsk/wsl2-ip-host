@@ -1,3 +1,9 @@
+#[cfg(not(target_os = "windows"))]
+fn main() {
+    eprintln!("Unsupported OS");
+    std::process::exit(1);
+}
+
 fn main() {
     if let Err(e) = cli::run() {
         eprintln!("{}", e);
@@ -5,18 +11,19 @@ fn main() {
     }
 }
 
+#[cfg(target_os = "windows")]
 mod cli {
+    use lib::find_wsl_ip;
     use main as lib;
 
     fn show_help() {
         print!(
             "wsl2-ip-host {}
 
-Usage: wsl2-ip-host [-d <distro-name>] [-n <host-name>] ...
+Usage: wsl2-ip-host [-n <host-name>] ...
 
 Uses wsl to retrieve the IP address of a wsl vm and writes it to the windows hosts
-file. Testing so far seems to indicate that all wsl2 distros return the same IP
-address so the -d option may not be important.
+file.
 
 Options:
 -n, --name <host-name>      Host name to associate the ip to [default: {}]
@@ -92,6 +99,7 @@ Options:
 
         let mut cfg = lib::Config::new();
         cfg.set_names(app.names.clone());
-        cfg.write_file()
+        let ip = find_wsl_ip()?;
+        lib::write_changes(&ip, &cfg)
     }
 }

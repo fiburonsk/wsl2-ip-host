@@ -3,7 +3,7 @@ use std::sync::mpsc;
 
 use crate::app::Cmd;
 
-const ICON_DATA: &[u8] = std::include_bytes!("./../resources/icon.png");
+const ICON_DATA: &[u8] = std::include_bytes!("./../../resources/icon.ico");
 
 // pub fn begin(tx: std::sync::mpsc::Sender<Cmd>, rx: std::sync::mpsc::Receiver<Cmd>) {
 pub fn begin(tx: mpsc::Sender<Cmd>, rx: mpsc::Receiver<Cmd>) {
@@ -59,6 +59,7 @@ pub struct AboutUi {
     message1: nwg::Label,
     message2: nwg::Label,
     message3: nwg::Label,
+    message4: nwg::Label,
     ok: nwg::Button,
 }
 
@@ -107,9 +108,9 @@ pub struct Systray {
 }
 
 pub mod ui {
-    const VERSION: &str = env!("CARGO_PKG_VERSION");
 
     use super::*;
+    use lib::VERSION;
     use main as lib;
     use nwg::{
         self,
@@ -153,11 +154,10 @@ pub mod ui {
         }
 
         fn update_buttons(&self, access: lib::Access) {
-            self.tray.tray_run.set_enabled(access.write);
-            self.actions_ui.write_button.set_enabled(access.write);
             self.actions_ui.preview_button.set_enabled(access.read);
             self.options.view_hosts_button.set_enabled(access.read);
         }
+
         fn on_init(&self) {
             self.tx.send(Cmd::OnInit).unwrap();
             match self.rx.recv() {
@@ -169,10 +169,7 @@ pub mod ui {
                         .set_collection(c.names.to_owned());
 
                     let access = c.check_hosts_path();
-                    if false == access.write {
-                        self.status
-                            .set_text(0, "Insufficient access to write to hosts file.");
-                    }
+
                     self.update_buttons(access);
                     self.options
                         .names_ui
@@ -406,7 +403,7 @@ pub mod ui {
 
             nwg::Window::builder()
                 .flags(nwg::WindowFlags::WINDOW)
-                .size((400, 270))
+                .size((400, 290))
                 .center(true)
                 .title("About")
                 .parent(Some(&parent))
@@ -424,23 +421,32 @@ pub mod ui {
                 .build(&mut data.font)?;
 
             nwg::Label::builder()
-                .text("Finds the windows subsystem for linux IPv4 address\r\nand writes entries in the hosts file.\r\n")
+                .text("Finds the windows subsystem for linux IPv4 address\r\nand calls on wsl2-ip-host-writer.exe to write\r\nentries in the hosts file.\r\n")
                 .flags(nwg::LabelFlags::VISIBLE)
                 .parent(&data.window)
                 .font(Some(&data.font))
                 .build(&mut data.message1)?;
+
             nwg::Label::builder()
-                .text("Usage: \"wsl2-ip-host-gui --run\" to immediately write\r\nto the hosts file on startup. --run is optional.\r\n")
+                .text("wsl2-ip-host-writer.exe requires elevated privileges\r\nand will prompt for access.\r\n")
                 .flags(nwg::LabelFlags::VISIBLE)
                 .parent(&data.window)
                 .font(Some(&data.font))
                 .build(&mut data.message2)?;
+
+            nwg::Label::builder()
+                .text("Usage: \"wsl2-ip-host --run\" to immediately write\r\nto the hosts file on startup. --run is optional.\r\n")
+                .flags(nwg::LabelFlags::VISIBLE)
+                .parent(&data.window)
+                .font(Some(&data.font))
+                .build(&mut data.message3)?;
+
             nwg::Label::builder()
                 .text("\"Menu -> Save Config\" saves settings which are \r\nautomatically loaded on startup.\r\n")
                 .flags(nwg::LabelFlags::VISIBLE)
                 .parent(&data.window)
                 .font(Some(&data.font))
-                .build(&mut data.message3)?;
+                .build(&mut data.message4)?;
 
             nwg::Button::builder()
                 .text("Ok")
@@ -454,7 +460,8 @@ pub mod ui {
                 .child_item(nwg::GridLayoutItem::new(&data.message1, 0, 1, 3, 1))
                 .child_item(nwg::GridLayoutItem::new(&data.message2, 0, 2, 3, 1))
                 .child_item(nwg::GridLayoutItem::new(&data.message3, 0, 3, 3, 1))
-                .child(2, 4, &data.ok)
+                .child_item(nwg::GridLayoutItem::new(&data.message4, 0, 4, 3, 1))
+                .child(2, 5, &data.ok)
                 .build(&mut data.layout)?;
 
             Ok(())
@@ -707,7 +714,7 @@ pub mod ui {
                 .flags(nwg::WindowFlags::MAIN_WINDOW)
                 .size((500, 400))
                 .center(true)
-                .title("WSL2 IP Writer")
+                .title("WSL2 IP Host")
                 .parent(Some(&data.window))
                 .build(&mut data.window)?;
 

@@ -2,7 +2,8 @@
 members = [
   "main",
   "cli",
-  "win"
+  "win",
+  "writer"
 ]
 
 [profile.release]
