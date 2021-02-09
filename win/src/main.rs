@@ -209,7 +209,10 @@ mod app {
                 Cmd::Write => match find_wsl_ip() {
                     Ok(ip) => match state.read() {
                         Ok(s) => match lib::write_changes(&ip, &s) {
-                            Ok(()) => main_tx.send(Cmd::Content("Saved.".to_owned())).unwrap(),
+                            Ok(()) => {
+                                main_tx.send(Cmd::Content("Saved.".to_owned())).unwrap();
+                                notify(&ip, &s.names);
+                            }
                             Err(e) => main_tx.send(Cmd::Content(e.to_owned())).unwrap(),
                         },
                         _ => main_tx
