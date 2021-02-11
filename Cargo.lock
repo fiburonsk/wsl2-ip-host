@@ -578,15 +578,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "wsl2-ip-host-cli"
-version = "1.6.0"
-dependencies = [
- "main",
- "winres",
-]
-
-[[package]]
-name = "wsl2-ip-host-win"
+name = "wsl2-ip-host"
 version = "1.6.0"
 dependencies = [
  "home",
@@ -595,6 +587,14 @@ dependencies = [
  "notify-rust",
  "serde",
  "serde_json",
+ "winres",
+]
+
+[[package]]
+name = "wsl2-ip-host-cli"
+version = "1.6.0"
+dependencies = [
+ "main",
  "winres",
 ]
 

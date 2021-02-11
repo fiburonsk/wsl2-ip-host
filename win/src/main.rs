@@ -1,4 +1,4 @@
-// #![windows_subsystem = "windows"]
+#![windows_subsystem = "windows"]
 #[cfg(not(target_os = "windows"))]
 fn main() {
     eprintln!("Unsupported OS");

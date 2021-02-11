@@ -1,5 +1,5 @@
 [package]
-name = "wsl2-ip-host-win"
+name = "wsl2-ip-host"
 version = "1.6.0"
 authors = ["fiburonsk <10441670+fiburonsk@users.noreply.github.com>"]
 edition = "2018"
