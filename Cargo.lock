@@ -205,7 +205,7 @@ dependencies = [
 
 [[package]]
 name = "main"
-version = "1.5.1"
+version = "1.6.0"
 dependencies = [
  "faccess",
  "winapi",
@@ -579,7 +579,7 @@ dependencies = [
 
 [[package]]
 name = "wsl2-ip-host-cli"
-version = "1.5.0"
+version = "1.6.0"
 dependencies = [
  "main",
  "winres",
@@ -587,7 +587,7 @@ dependencies = [
 
 [[package]]
 name = "wsl2-ip-host-win"
-version = "1.5.0"
+version = "1.6.0"
 dependencies = [
  "home",
  "main",
@@ -600,7 +600,7 @@ dependencies = [
 
 [[package]]
 name = "wsl2-ip-host-writer"
-version = "1.5.0"
+version = "1.6.0"
 dependencies = [
  "embed-resource",
  "main",

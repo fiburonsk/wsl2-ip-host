@@ -38,6 +38,13 @@ pub struct ActionsUi {
 }
 
 #[derive(Default)]
+pub struct DistrosUi {
+    layout: nwg::FlexboxLayout,
+    label: nwg::Label,
+    list: nwg::ListBox<String>,
+}
+
+#[derive(Default)]
 pub struct Options {
     layout: nwg::FlexboxLayout,
     hosts_path_file_button: nwg::Button,
@@ -48,6 +55,10 @@ pub struct Options {
     view_hosts_button: nwg::Button,
     names_ui_frame: nwg::Frame,
     names_ui: NamesUi,
+    distros_ui: DistrosUi,
+    distros_frame: nwg::Frame,
+    names_distros_row: nwg::GridLayout,
+    names_distros_frame: nwg::Frame,
 }
 
 #[derive(Default)]
@@ -161,25 +172,44 @@ pub mod ui {
         fn on_init(&self) {
             self.tx.send(Cmd::OnInit).unwrap();
             match self.rx.recv() {
-                Ok(Cmd::State(c)) => {
-                    self.options.hosts_path_input.set_text(&c.hosts_path);
-                    self.options
-                        .names_ui
-                        .names_list
-                        .set_collection(c.names.to_owned());
+                Ok(Cmd::InitOk) => {
+                    match self.rx.recv() {
+                        Ok(Cmd::Distros(d)) => {
+                            self.options.distros_ui.list.set_collection(d);
+                        }
+                        _ => (),
+                    };
+                    match self.rx.recv() {
+                        Ok(Cmd::State(c)) => {
+                            self.options.hosts_path_input.set_text(&c.hosts_path);
+                            self.options
+                                .names_ui
+                                .names_list
+                                .set_collection(c.names.to_owned());
 
-                    let access = c.check_hosts_path();
+                            let access = c.check_hosts_path();
+                            self.update_buttons(access);
+                            self.options
+                                .names_ui
+                                .names_add
+                                .set_enabled(self.options.names_ui.names_input.text().len() > 0);
 
-                    self.update_buttons(access);
-                    self.options
-                        .names_ui
-                        .names_add
-                        .set_enabled(self.options.names_ui.names_input.text().len() > 0)
+                            if let Some(d) = &c.distro {
+                                self.options.distros_ui.list.set_selection_string(d);
+                            }
+
+                            self.actions_ui.write_button.set_enabled(true);
+                            self.options.names_ui.names_remove.set_enabled(true);
+                        }
+                        _ => (),
+                    };
                 }
                 Ok(Cmd::Content(s)) => {
                     self.status.set_text(0, &s);
                 }
-                _ => (),
+                _ => self
+                    .status
+                    .set_text(0, "Unknown unable to initialize application."),
             }
         }
 
@@ -229,36 +259,45 @@ pub mod ui {
 
         fn select_file(&self) {
             if true == self.hosts_file_dialog.run(Some(self.window.handle)) {
-                match self.hosts_file_dialog.get_selected_item() {
-                    Ok(s) => {
-                        self.tx
-                            .send(Cmd::SetHostsFile(s.to_str().unwrap().to_owned()))
-                            .unwrap();
+                if let Ok(s) = self.hosts_file_dialog.get_selected_item() {
+                    self.tx
+                        .send(Cmd::SetHostsFile(s.to_str().unwrap().to_owned()))
+                        .unwrap();
 
-                        if let Ok(Cmd::State(c)) = self.rx.recv() {
-                            self.options.hosts_path_input.set_text(&c.hosts_path);
-                            self.status.set_text(0, "Updated hosts file path.");
-                            self.update_buttons(c.check_hosts_path());
-                        }
+                    if let Ok(Cmd::State(c)) = self.rx.recv() {
+                        self.options.hosts_path_input.set_text(&c.hosts_path);
+                        self.status.set_text(0, "Updated hosts file path.");
+                        self.update_buttons(c.check_hosts_path());
                     }
-                    _ => (),
                 }
             }
         }
 
         fn show_hosts_file(&self) {
             self.tx.send(Cmd::ReadFile).unwrap();
-            if let Ok(Cmd::Content(s)) = self.rx.recv() {
-                self.preview_ui.preview.set_text(&s);
-                self.preview_ui.window.set_visible(true);
+            match self.rx.recv() {
+                Ok(Cmd::Content(s)) => {
+                    self.preview_ui.preview.set_text(&s);
+                    self.preview_ui.window.set_visible(true);
+                }
+                Ok(Cmd::Error(s)) => {
+                    self.status.set_text(0, &s);
+                }
+                _ => self.status.set_text(0, "Unknown issue."),
             }
         }
 
         fn show_preview(&self) {
             self.tx.send(Cmd::Preview).unwrap();
-            if let Ok(Cmd::Content(s)) = self.rx.recv() {
-                self.preview_ui.preview.set_text(&s);
-                self.preview_ui.window.set_visible(true);
+            match self.rx.recv() {
+                Ok(Cmd::Content(s)) => {
+                    self.preview_ui.preview.set_text(&s);
+                    self.preview_ui.window.set_visible(true);
+                }
+                Ok(Cmd::Error(s)) => {
+                    self.status.set_text(0, &s);
+                }
+                _ => self.status.set_text(0, "Unknown issue."),
             }
         }
 
@@ -279,6 +318,14 @@ pub mod ui {
         fn show_menu(&self) {
             let (x, y) = nwg::GlobalCursor::position();
             self.tray.tray_menu.popup(x, y);
+        }
+
+        fn on_distro_select(&self) {
+            if let Some(s) = self.options.distros_ui.list.selection_string() {
+                self.tx
+                    .send(Cmd::SetDistro(s.replace("(Default)", "").trim().to_owned()))
+                    .unwrap();
+            }
         }
 
         fn on_exit(&self) {
@@ -332,11 +379,13 @@ pub mod ui {
             nwg::Button::builder()
                 .text("Preview")
                 .parent(&parent)
+                .enabled(false)
                 .build(&mut data.preview_button)?;
 
             nwg::Button::builder()
                 .text("Write to file")
                 .parent(&parent)
+                .enabled(false)
                 .build(&mut data.write_button)?;
 
             nwg::FlexboxLayout::builder()
@@ -352,6 +401,56 @@ pub mod ui {
                 .child_size(Size {
                     width: Dimension::Points(96.0),
                     height: Dimension::Points(28.0),
+                })
+                .build(&mut data.layout)?;
+
+            Ok(())
+        }
+    }
+
+    impl PartialUi for DistrosUi {
+        fn build_partial<W: Into<nwg::ControlHandle>>(
+            data: &mut DistrosUi,
+            parent: Option<W>,
+        ) -> Result<(), nwg::NwgError> {
+            let parent = parent.unwrap().into();
+            nwg::Label::builder()
+                .text("Select WSL Distro")
+                .flags(nwg::LabelFlags::VISIBLE)
+                .parent(&parent)
+                .build(&mut data.label)?;
+
+            nwg::ListBox::builder()
+                .parent(&parent)
+                .collection(vec![])
+                .enabled(false)
+                .build(&mut data.list)?;
+
+            nwg::FlexboxLayout::builder()
+                .parent(&parent)
+                .flex_direction(style::FlexDirection::Column)
+                .auto_spacing(None)
+                .child(&data.label)
+                .child_size(Size {
+                    width: Dimension::Percent(1.0),
+                    height: Dimension::Points(32.0),
+                })
+                .child_margin(Rect {
+                    start: Dimension::Points(0.0),
+                    end: Dimension::Points(0.0),
+                    bottom: Dimension::Points(5.0),
+                    top: Dimension::Points(0.0),
+                })
+                .child(&data.list)
+                .child_size(Size {
+                    width: Dimension::Percent(1.0),
+                    height: Dimension::Percent(1.0),
+                })
+                .border(Rect {
+                    start: Dimension::Points(0.0),
+                    end: Dimension::Points(8.0),
+                    bottom: Dimension::Points(0.0),
+                    top: Dimension::Points(8.0),
                 })
                 .build(&mut data.layout)?;
 
@@ -536,26 +635,35 @@ pub mod ui {
 
             nwg::ListBox::builder()
                 .parent(&data.list_frame)
+                .enabled(false)
                 .collection(vec![])
                 .build(&mut data.names_list)?;
 
             nwg::Button::builder()
                 .text("Remove")
+                .enabled(false)
                 .parent(&data.list_frame)
                 .build(&mut data.names_remove)?;
 
             nwg::FlexboxLayout::builder()
                 .flex_direction(style::FlexDirection::Row)
                 .parent(&data.list_frame)
+                .auto_spacing(None)
                 .child(&data.names_list)
                 .child_size(Size {
                     width: Dimension::Percent(1.0),
-                    height: Dimension::Auto,
+                    height: Dimension::Percent(1.0),
                 })
                 .child(&data.names_remove)
                 .child_size(Size {
                     width: Dimension::Points(96.0),
                     height: Dimension::Points(28.0),
+                })
+                .child_margin(Rect {
+                    start: Dimension::Points(8.0),
+                    end: Dimension::Points(0.0),
+                    bottom: Dimension::Points(0.0),
+                    top: Dimension::Points(0.0),
                 })
                 .build(&mut data.list_row)?;
 
@@ -572,21 +680,41 @@ pub mod ui {
 
             nwg::Button::builder()
                 .text("Add")
+                .enabled(false)
                 .parent(&data.input_frame)
                 .build(&mut data.names_add)?;
 
             nwg::FlexboxLayout::builder()
                 .flex_direction(style::FlexDirection::Row)
+                .auto_spacing(None)
                 .parent(&data.input_frame)
                 .child(&data.names_input)
                 .child_size(Size {
                     width: Dimension::Percent(1.0),
                     height: Dimension::Points(28.0),
                 })
+                .child_margin(Rect {
+                    start: Dimension::Points(0.0),
+                    end: Dimension::Points(0.0),
+                    bottom: Dimension::Points(0.0),
+                    top: Dimension::Points(0.0),
+                })
                 .child(&data.names_add)
                 .child_size(Size {
                     width: Dimension::Points(96.0),
                     height: Dimension::Points(28.0),
+                })
+                .child_margin(Rect {
+                    start: Dimension::Points(8.0),
+                    end: Dimension::Points(0.0),
+                    bottom: Dimension::Points(0.0),
+                    top: Dimension::Points(0.0),
+                })
+                .border(Rect {
+                    start: Dimension::Points(0.0),
+                    end: Dimension::Points(0.0),
+                    bottom: Dimension::Points(0.0),
+                    top: Dimension::Points(8.0),
                 })
                 .build(&mut data.input_row)?;
 
@@ -604,6 +732,12 @@ pub mod ui {
                     width: Dimension::Percent(1.0),
                     height: Dimension::Percent(1.0),
                 })
+                .border(Rect {
+                    start: Dimension::Points(8.0),
+                    end: Dimension::Points(0.0),
+                    bottom: Dimension::Points(0.0),
+                    top: Dimension::Points(0.0),
+                })
                 .build(&mut data.layout)?;
 
             Ok(())
@@ -616,6 +750,11 @@ pub mod ui {
             parent: Option<W>,
         ) -> Result<(), nwg::NwgError> {
             let parent = parent.unwrap().into();
+
+            nwg::Frame::builder()
+                .parent(&parent)
+                .flags(nwg::FrameFlags::VISIBLE)
+                .build(&mut data.names_distros_frame)?;
 
             nwg::Label::builder()
                 .text("Path to hosts file")
@@ -640,6 +779,7 @@ pub mod ui {
 
             nwg::Button::builder()
                 .text("View file")
+                .enabled(false)
                 .parent(&data.hosts_path_row_frame)
                 .build(&mut data.view_hosts_button)?;
 
@@ -666,11 +806,25 @@ pub mod ui {
                 .build(&mut data.hosts_path_row)?;
 
             nwg::Frame::builder()
-                .parent(&parent)
+                .parent(&data.names_distros_frame)
+                .flags(nwg::FrameFlags::VISIBLE)
+                .build(&mut data.distros_frame)?;
+
+            DistrosUi::build_partial(&mut data.distros_ui, Some(&data.distros_frame))?;
+
+            nwg::Frame::builder()
+                .parent(&data.names_distros_frame)
                 .flags(nwg::FrameFlags::VISIBLE)
                 .build(&mut data.names_ui_frame)?;
 
             NamesUi::build_partial(&mut data.names_ui, Some(&data.names_ui_frame))?;
+
+            nwg::GridLayout::builder()
+                .parent(&data.names_distros_frame)
+                .child(0, 0, &data.distros_frame)
+                .child(1, 0, &data.names_ui_frame)
+                .spacing(0)
+                .build(&mut data.names_distros_row)?;
 
             nwg::FlexboxLayout::builder()
                 .parent(&parent)
@@ -687,7 +841,7 @@ pub mod ui {
                     width: Dimension::Percent(1.0),
                     height: Dimension::Points(44.0),
                 })
-                .child(&data.names_ui_frame)
+                .child(&data.names_distros_frame)
                 .child_size(Size {
                     width: Dimension::Percent(1.0),
                     height: Dimension::Percent(1.0),
@@ -712,7 +866,7 @@ pub mod ui {
             nwg::Window::builder()
                 .icon(Some(&data.icon))
                 .flags(nwg::WindowFlags::MAIN_WINDOW)
-                .size((500, 400))
+                .size((560, 400))
                 .center(true)
                 .title("WSL2 IP Host")
                 .parent(Some(&data.window))
@@ -764,7 +918,7 @@ pub mod ui {
                 .child_margin(Rect {
                     start: Dimension::Points(0.0),
                     end: Dimension::Points(0.0),
-                    top: Dimension::Points(8.0),
+                    top: Dimension::Points(0.0),
                     bottom: Dimension::Points(32.0),
                 })
                 .build(&mut data.layout)?;
@@ -784,6 +938,11 @@ pub mod ui {
                         evt_ui.about_ui.process_event(evt, &evt_data, handle);
 
                         match evt {
+                            Event::OnListBoxSelect => {
+                                if &handle == &evt_ui.options.distros_ui.list {
+                                    Main::on_distro_select(&evt_ui);
+                                }
+                            }
                             Event::OnTextInput => {
                                 if &handle == &evt_ui.options.names_ui.names_input {
                                     Main::on_domain_text_change(&evt_ui);

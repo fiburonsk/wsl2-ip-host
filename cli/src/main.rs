@@ -20,12 +20,14 @@ mod cli {
         print!(
             "wsl2-ip-host {}
 
-Usage: wsl2-ip-host [-n <host-name>] ...
+Usage: wsl2-ip-host [-d distro] [-n <host-name>] ...
 
 Uses wsl to retrieve the IP address of a wsl vm and writes it to the windows hosts
 file.
 
 Options:
+-d, --distro <distro>       WSL distro name -d passed to wsl.exe. Falls back to your
+                            default distro if omitted.
 -n, --name <host-name>      Host name to associate the ip to [default: {}]
                             this option can be passed multiple times to add more than one
                             host name.
@@ -40,11 +42,13 @@ Options:
     struct App {
         help: bool,
         names: Vec<String>,
+        distro: Option<String>,
     }
 
     impl App {
         fn apply(&mut self, option: &str, value: Option<String>) {
             match option {
+                "-d" | "--distro" if value.is_some() => self.distro = value,
                 "-n" | "--name" if value.is_some() => self.names.push(value.unwrap()),
                 "-n" | "--name" => (),
                 _ => (),
@@ -58,6 +62,7 @@ Options:
         let mut cli = App {
             help: true,
             names: vec![],
+            distro: None,
         };
 
         if args.iter().any(|a| &"-h" == a || &"--help" == a) {
@@ -66,7 +71,7 @@ Options:
             cli.help = false;
         }
 
-        let options = ["-n", "--name"];
+        let options = ["-d", "--distro", "-n", "--name"];
         let mut iter = args.into_iter().peekable();
 
         while let Some(text) = iter.next() {
@@ -99,7 +104,8 @@ Options:
 
         let mut cfg = lib::Config::new();
         cfg.set_names(app.names.clone());
-        let ip = find_wsl_ip()?;
+        cfg.distro = app.distro.clone();
+        let ip = find_wsl_ip(&cfg.distro)?;
         lib::write_changes(&ip, &cfg)
     }
 }

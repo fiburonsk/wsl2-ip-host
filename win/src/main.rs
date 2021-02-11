@@ -1,4 +1,4 @@
-#![windows_subsystem = "windows"]
+// #![windows_subsystem = "windows"]
 #[cfg(not(target_os = "windows"))]
 fn main() {
     eprintln!("Unsupported OS");
@@ -18,7 +18,6 @@ fn main() {
 #[cfg(target_os = "windows")]
 mod app {
     use crate::ui;
-    use lib::find_wsl_ip;
     use main as lib;
     use serde::{Deserialize, Serialize};
     use serde_json;
@@ -28,6 +27,10 @@ mod app {
     pub enum Cmd {
         AddName(String),
         Content(String),
+        InitOk,
+        Distros(Vec<String>),
+        SetDistro(String),
+        Error(String),
         None,
         OnInit,
         Preview,
@@ -43,6 +46,7 @@ mod app {
     struct SaveConfig {
         hosts_path: String,
         domains: Vec<String>,
+        distro: Option<String>,
     }
 
     const SAVE_NAME: &str = ".wsl2-ip-host.json";
@@ -52,6 +56,7 @@ mod app {
             SaveConfig {
                 hosts_path: config.hosts_path.to_owned(),
                 domains: config.names.to_owned(),
+                distro: config.distro.to_owned(),
             }
         };
 
@@ -75,6 +80,7 @@ mod app {
                 serde_json::from_slice(&content).map_err(|e| format!("{}", e))?;
             let mut config = lib::Config::with_hosts_path(&state.hosts_path);
             config.names = state.domains.to_owned();
+            config.distro = state.distro;
 
             config
         } else {
@@ -109,9 +115,10 @@ mod app {
     }
 
     pub fn run() -> Result<(), String> {
-        let state = read_config()?;
-
+        let unable_to_read = "Unable to read app state.";
+        let state = read_config().unwrap_or(lib::Config::new());
         let state = RwLock::new(state);
+        let distros = lib::find_wsl_distros().unwrap_or(vec![]);
         let (cmd_tx, cmd_rx) = mpsc::channel();
         let (main_tx, main_rx) = mpsc::channel();
 
@@ -123,10 +130,12 @@ mod app {
             match cmd {
                 Cmd::OnInit => match state.read() {
                     Ok(s) => {
+                        main_tx.send(Cmd::InitOk).unwrap();
+                        main_tx.send(Cmd::Distros(distros.to_owned())).unwrap();
                         main_tx.send(Cmd::State(s.clone())).unwrap();
 
                         if std::env::args().any(|a| a == "--run") {
-                            match find_wsl_ip() {
+                            match lib::find_wsl_ip(&s.distro) {
                                 Ok(ip) => match lib::write_changes(&ip, &s) {
                                     Ok(_) => notify(&ip, &s.names),
                                     Err(_) => (),
@@ -139,7 +148,12 @@ mod app {
                         .send(Cmd::Content("Unable to initialize state.".to_owned()))
                         .unwrap(),
                 },
-
+                Cmd::SetDistro(name) => match state.write() {
+                    Ok(mut s) => {
+                        s.distro = Some(name);
+                    }
+                    _ => (),
+                },
                 Cmd::AddName(name) => {
                     if let Ok(mut s) = state.write() {
                         s.add_name(name);
@@ -167,7 +181,7 @@ mod app {
                         s.set_hosts_path(&path);
                         main_tx.send(Cmd::State(s.clone())).unwrap();
                     }
-                    _ => main_tx.send(Cmd::None).unwrap(),
+                    _ => main_tx.send(Cmd::Error(unable_to_read.to_owned())).unwrap(),
                 },
 
                 Cmd::ReadFile => match state.read() {
@@ -175,20 +189,20 @@ mod app {
                         Ok(c) => main_tx
                             .send(Cmd::Content(c.join("\r\n").to_owned()))
                             .unwrap(),
-                        _ => main_tx.send(Cmd::None).unwrap(),
+                        Err(s) => main_tx.send(Cmd::Error(s)).unwrap(),
                     },
-                    _ => main_tx.send(Cmd::None).unwrap(),
+                    _ => main_tx.send(Cmd::Error(unable_to_read.to_owned())).unwrap(),
                 },
 
-                Cmd::Preview => match lib::find_wsl_ip() {
-                    Ok(ip) => match state.read() {
-                        Ok(s) => match s.preview(&ip) {
+                Cmd::Preview => match state.read() {
+                    Ok(s) => match lib::find_wsl_ip(&s.distro) {
+                        Ok(ip) => match s.preview(&ip) {
                             Ok(l) => main_tx.send(Cmd::Content(l.join("\r\n"))).unwrap(),
-                            Err(_) => main_tx.send(Cmd::None).unwrap(),
+                            Err(s) => main_tx.send(Cmd::Error(s)).unwrap(),
                         },
-                        _ => main_tx.send(Cmd::None).unwrap(),
+                        Err(s) => main_tx.send(Cmd::Error(s)).unwrap(),
                     },
-                    _ => main_tx.send(Cmd::None).unwrap(),
+                    _ => main_tx.send(Cmd::Error(unable_to_read.to_owned())).unwrap(),
                 },
 
                 Cmd::SaveConfig => match state.read() {
@@ -202,25 +216,23 @@ mod app {
                         Err(e) => main_tx.send(Cmd::Content(format!("{}", e))).unwrap(),
                     },
                     _ => main_tx
-                        .send(Cmd::Content("Unable to read app state.".to_owned()))
+                        .send(Cmd::Content(unable_to_read.to_owned()))
                         .unwrap(),
                 },
 
-                Cmd::Write => match find_wsl_ip() {
-                    Ok(ip) => match state.read() {
-                        Ok(s) => match lib::write_changes(&ip, &s) {
+                Cmd::Write => match state.read() {
+                    Ok(s) => match lib::find_wsl_ip(&s.distro) {
+                        Ok(ip) => match lib::write_changes(&ip, &s) {
                             Ok(()) => {
                                 main_tx.send(Cmd::Content("Saved.".to_owned())).unwrap();
                                 notify(&ip, &s.names);
                             }
                             Err(e) => main_tx.send(Cmd::Content(e.to_owned())).unwrap(),
                         },
-                        _ => main_tx
-                            .send(Cmd::Content("Unable to read app state.".to_owned()))
-                            .unwrap(),
+                        Err(s) => main_tx.send(Cmd::Content(s)).unwrap(),
                     },
                     _ => main_tx
-                        .send(Cmd::Content("Unable to read ip from wsl2.".to_owned()))
+                        .send(Cmd::Content(unable_to_read.to_owned()))
                         .unwrap(),
                 },
 

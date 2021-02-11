@@ -5,12 +5,32 @@ mod util {
     const CREATE_NO_WINDOW: u32 = 0x08000000;
     pub const HOSTS_COMMENT: &str = "# added by wsl2-ip-host";
 
-    pub fn run_wsl_ip_cmd() -> Result<std::process::Output, String> {
+    pub fn run_wsl_ip_cmd(distro: &Option<String>) -> Result<std::process::Output, String> {
         use std::os::windows::process::CommandExt;
 
-        let args = vec!["--", "ip", "-4", "-br", "address", "show", "eth0"];
+        let mut args = if let Some(s) = distro {
+            vec!["-d", &s[..]]
+        } else {
+            vec![]
+        };
+
+        args.append(&mut vec![
+            "--", "ip", "-4", "-br", "address", "show", "eth0",
+        ]);
 
         let mut cmd = std::process::Command::new("wsl.exe");
+
+        cmd.args(args);
+        cmd.creation_flags(CREATE_NO_WINDOW);
+        cmd.output().map_err(|e| format!("{}", e))
+    }
+
+    pub fn run_wsl_list_distros() -> Result<std::process::Output, String> {
+        use std::os::windows::process::CommandExt;
+
+        let args = vec!["-l", "--all"];
+        let mut cmd = std::process::Command::new("wsl.exe");
+
         cmd.args(args);
         cmd.creation_flags(CREATE_NO_WINDOW);
         cmd.output().map_err(|e| format!("{}", e))
@@ -72,12 +92,10 @@ pub fn write_changes(ip: &str, state: &Config) -> Result<(), String> {
     }
 }
 
-pub fn find_wsl_ip() -> Result<String, String> {
-    let output = util::run_wsl_ip_cmd()?;
+pub fn find_wsl_ip(distro: &Option<String>) -> Result<String, String> {
+    let output = util::run_wsl_ip_cmd(distro)?;
     if false == output.status.success() {
-        return Err(
-            String::from_utf8(output.stderr).unwrap_or("Unable to run ip command.".to_owned())
-        );
+        return Err("Unable to run ip command.".to_owned());
     }
 
     let txt = String::from_utf8(output.stdout).map_err(|e| format!("{}", e))?;
@@ -93,10 +111,30 @@ pub fn find_wsl_ip() -> Result<String, String> {
     }
 }
 
+pub fn find_wsl_distros() -> Result<Vec<String>, String> {
+    let output = util::run_wsl_list_distros()?;
+    if false == output.status.success() {
+        return Err(String::from_utf8(output.stderr)
+            .unwrap_or("Unable to get a list of distros from wsl.exe.".to_owned()));
+    }
+
+    // wsl.exe outputs utf16 so convert the output to a [u16] from a [u8]
+    let b: Vec<u16> = output
+        .stdout
+        .chunks_exact(2)
+        .map(|c| u16::from_ne_bytes([c[0], c[1]]))
+        .collect();
+
+    let txt = String::from_utf16(&b).map_err(|e| format!("{}", e))?;
+
+    Ok(txt.lines().skip(1).map(|l| l.trim().to_owned()).collect())
+}
+
 #[derive(Clone)]
 pub struct Config {
     pub hosts_path: String,
     pub names: Vec<String>,
+    pub distro: Option<String>,
 }
 
 pub struct Access {
@@ -147,6 +185,7 @@ impl Config {
         Config {
             hosts_path: path.to_owned(),
             names: vec![],
+            distro: None,
         }
     }
 
