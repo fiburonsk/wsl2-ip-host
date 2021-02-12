@@ -13,7 +13,7 @@ I use wsl2-ip-host.exe as a scheduled task that begins on logon to write the wsl
 
 ## wsl2-ip-host.exe
 
-A windows tool that lives in the system tray where a convenient write action is available.  Domains can be configured within the `open` window as well as selecting a different host file path in case it were to be needed.  The configuration can be saved through the menu option at the top.  The configuration is saved at ~/.wsl2-ip-host.json and this file is automatically loaded on startup.
+A windows tool that lives in the system tray where a convenient write action is available.  Domains can be configured within the `open` window as well as selecting a different host file path in case it were to be needed.  The configuration can be saved through the menu option at the top.  The configuration is saved at ~/.wsl2-ip-host.json and this file is automatically loaded on startup.  It is possible that a default distro can not run the `ip -4 -br address show eth0` command.  You can select among the available distros on your system.
 
 ## wsl2-ip-host-writer.exe
 
