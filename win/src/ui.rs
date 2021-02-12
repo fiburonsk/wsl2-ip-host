@@ -203,6 +203,12 @@ pub mod ui {
                         }
                         _ => (),
                     };
+
+                    match self.rx.recv() {
+                        Ok(Cmd::None) => (),
+                        Ok(Cmd::Error(s)) => self.status.set_text(0, &s),
+                        _ => self.status.set_text(0, "Unknown issue.")
+                    };
                 }
                 Ok(Cmd::Content(s)) => {
                     self.status.set_text(0, &s);

@@ -24,17 +24,21 @@ This application does the work of writing the IP to the hosts file.  It requires
 A cli utility to call the writer and write changes to the hosts file.
 
 ```
-Usage: wsl2-ip-host [-n <host-name>] ...
+Usage: wsl2-ip-host [-d distro] [-n <host-name>] ...
 
-Uses wsl to retrieve the IP address of a wsl vm and writes it to the windows hostsfile.
+Uses wsl to retrieve the IP address of a wsl vm and writes it to the windows hosts  
+file.
 
 Options:
+-d, --distro <distro>       WSL distro name -d passed to wsl.exe. Falls back to your
+                            default distro if omitted.
 -n, --name <host-name>      Host name to associate the ip to [default: host.wsl.internal]
-                            this option can be passed multiple times to add more than one host name.
+                            this option can be passed multiple times to add more than one
+                            host name.
 -h, --help                  Display help text
 ```
 
-The domain can be changed using the `-n` or `--name` option.  You can supply multiple domains by passing the `-n` or `--name` option multiple times.
+The domain can be changed using the `-n` or `--name` option.  You can supply multiple domains by passing the `-n` or `--name` option multiple times. If the default WSL distro does not work you can use `-d` or `--distro` to provide a different distro to run the command against.
 
 ## Build
 

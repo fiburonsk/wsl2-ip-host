@@ -115,6 +115,7 @@ mod app {
     }
 
     pub fn run() -> Result<(), String> {
+        let writer = lib::find_writer();
         let unable_to_read = "Unable to read app state.";
         let state = read_config().unwrap_or(lib::Config::new());
         let state = RwLock::new(state);
@@ -133,6 +134,10 @@ mod app {
                         main_tx.send(Cmd::InitOk).unwrap();
                         main_tx.send(Cmd::Distros(distros.to_owned())).unwrap();
                         main_tx.send(Cmd::State(s.clone())).unwrap();
+                        match &writer {
+                            Some(w) => main_tx.send(Cmd::Error(w.to_owned())).unwrap(),
+                            None => main_tx.send(Cmd::None).unwrap(),
+                        };
 
                         if std::env::args().any(|a| a == "--run") {
                             match lib::find_wsl_ip(&s.distro) {

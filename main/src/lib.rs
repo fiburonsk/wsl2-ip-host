@@ -1,9 +1,11 @@
 use faccess::PathExt;
 use std::io::BufRead;
+use util::WRITER_EXE;
 
 mod util {
     const CREATE_NO_WINDOW: u32 = 0x08000000;
     pub const HOSTS_COMMENT: &str = "# added by wsl2-ip-host";
+    pub const WRITER_EXE: &str = "wsl2-ip-host-writer.exe";
 
     pub fn run_wsl_ip_cmd(distro: &Option<String>) -> Result<std::process::Output, String> {
         use std::os::windows::process::CommandExt;
@@ -71,7 +73,7 @@ pub fn write_changes(ip: &str, state: &Config) -> Result<(), String> {
     let verb: Vec<u16> = util::null_text("open");
     let names = state.names.join(",");
     let path = &state.hosts_path;
-    let file = util::null_text("wsl2-ip-host-writer.exe");
+    let file = util::null_text(WRITER_EXE);
     let args = util::null_text(format!("{} {} {}", ip, names, path).as_str());
 
     let ret = unsafe {
@@ -89,6 +91,17 @@ pub fn write_changes(ip: &str, state: &Config) -> Result<(), String> {
         Ok(())
     } else {
         Err("Unable to run wsl2-ip-host-writer.".to_owned())
+    }
+}
+
+pub fn find_writer() -> Option<String> {
+    match std::process::Command::new(WRITER_EXE).spawn() {
+        Err(s) if s.to_string().contains("requires elevation") => None,
+        Err(s) if s.kind() == std::io::ErrorKind::NotFound => {
+            Some(format!("wsl2-ip-host-writer.exe not found: {}", s))
+        }
+        Err(s) => Some(s.to_string()),
+        Ok(_) => None,
     }
 }
 
