@@ -5,19 +5,19 @@
 * A wsl distro be installed
 * `ip` command available in a wsl distro with eth0 adapter
 
-This application runs `ip -4 -br address show eth0` inside of the default wsl distro to get the IP address.  This ip address is used for writing entries into the hosts file.  The default domain is `host.wsl.internal`.  
+This application runs `ip -4 -br address show eth0` inside of the default wsl distro to get the IP address.  This ip address is used for writing entries into the OSes hosts file.  The default domain is `host.wsl.internal`.  
 
-I use wsl2-ip-host.exe as a scheduled task that begins on logon to write the wsl2 ip right away since it changes on restart.
+I use wsl2-ip-host.exe as a scheduled task that begins on logon to write the new wsl2 ip since it changes on restart.
 
-`wsl2-ip-host.exe` and `wsl2-ip-host-cli.exe` both require that `wsl2-ip-host-writer.exe` be either in the same folder or in your path so that it can be found and run. 
+`wsl2-ip-host.exe` and `wsl2-ip-host-cli.exe` both require that `wsl2-ip-host-writer.exe` be either in the same folder or in your path so that it can be run to write changes. 
 
 ## wsl2-ip-host.exe
 
-A windows tool that lives in the system tray where a convenient write action is available.  Domains can be configured within the `open` window as well as selecting a different host file path in case it were to be needed.  The configuration can be saved through the menu option at the top.  The configuration is saved at ~/.wsl2-ip-host.json and this file is automatically loaded on startup.  It is possible that a default distro can not run the `ip -4 -br address show eth0` command.  You can select among the available distros on your system.
+This appplication places an icon in the system tray.  It can be configured by selecting `open`.  Domains can be configured here as well as selecting a different host file path in case it were to be needed.  It is possible that a default distro can not run the `ip -4 -br address show eth0` command.  You can select among the available distros on your system with the distros list.  The configuration can be saved through the menu option at the top.  The configuration is saved at `~/.wsl2-ip-host.json` and this file is automatically loaded on startup.  
 
 ## wsl2-ip-host-writer.exe
 
-This application does the work of writing the IP to the hosts file.  It requires elevated privileges to run and will prompt first.
+This application does the work of writing the IP with any domains to the hosts file.  It requires elevated privileges to run and will prompt first.
 
 ## wsl2-ip-host-cli.exe
 
